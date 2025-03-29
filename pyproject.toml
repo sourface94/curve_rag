@@ -1,0 +1,9 @@
+[project]
+name = "curverag"
+version = "0.1.0"
+description = "Using hyperbolic KGs for RAG"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "semchunk>=3.2.1",
+]
