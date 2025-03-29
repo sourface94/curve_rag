@@ -1,4 +1,4 @@
-entity_relationship_extraction__disparate_prompt = """# DOMAIN
+entity_relationship_extraction_disparate_prompt = """# DOMAIN
 # GOAL
 Your goal is to highlight information that is relevant to the domain and the queries that may be asked on it. Given an input document, identify all relevant entities and all relationships among them.
 
