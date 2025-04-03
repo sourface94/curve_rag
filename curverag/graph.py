@@ -34,18 +34,18 @@ class Graph:
     def add_edge(self, edge: Edge):
         self.edges.append(edge)
 
-    def get_matching_node(self, node):
-        return NotImplementedError
-    
-    def get_matching_edge(self, node):
+    def get_matching_node(self, node: Node):
         return NotImplementedError
 
-    def upsert(self, sub_graph):
+    def get_matching_edge(self, edge: Edge):
+        return NotImplementedError
+
+    def upsert(self, sub_graph: Graph):
         if self.is_empty():
             self.nodes = sub_graph.nodes
             self.relationships = sub_graph.relationships
             return
-        
+    
         for node in sub_graph.nodes:
             matching_node = self.get_matching_node()
             if matching_node is None:
@@ -59,9 +59,9 @@ class Graph:
 
 def create_graph(texts: List[str], is_narrative: bool = False, llm_model_path="./models/7B/llama-model.gguf", max_tokens=1000):
     """
-    Create knowledge graph. 
+    Create knowledge graph.
 
-    Creation of this packages knowledge center 
+    Creation of this packages knowledge center
     """
     
     # chunk text
