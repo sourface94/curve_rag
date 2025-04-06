@@ -117,8 +117,9 @@ class Graph:
         nearest_hop_nodes = nn_hop(embeddings, entities_in_graph, hop=2)
 
 
-    # get the top k nodes
-    return nearest_nodes + nearest_hop_nodes
+        # get the top k nodes
+        return nearest_nodes + nearest_hop_nodes
+
 
 def create_graph(texts: List[str], is_narrative: bool = False, llm_model_path="./models/7B/llama-model.gguf", max_tokens=1000):
     """
