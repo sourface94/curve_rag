@@ -1,9 +1,8 @@
-entity_relationship_extraction_disparate_prompt = """# DOMAIN
+PROMPTS = {}
+PROMPTS["entity_relationship_extraction_disparate_prompt"] = """
+# DOMAIN
 # GOAL
 Your goal is to highlight information that is relevant to the domain and the queries that may be asked on it. Given an input document, identify all relevant entities and all relationships among them.
-
-Examples of possible queries:
-{example_queries}
 
 # INSTRUCTIONS
 1. **ENTITY IDENTIFICATION**: Identify and meticulously extract all entities mentioned in the document that belong to the provided ENTITY TYPES. For each entity, provide a concise description capturing its key features within the document's context. Use singular entity names and split compound concepts when necessary for clarity.
@@ -45,4 +44,34 @@ Document: "Radio City: Radio City is India's first private FM radio station and 
     {{"source": "PLANETRADIOCITY", "target": "VIDEO", "desc": "PlanetRadiocity.com includes music-related video content"}}
   ]
 }}
+
+# INPUT DATA
+Document: {input_text}
+"""
+
+
+PROMPTS["generate_response_query_with_references"] = """
+You are a helpful assistant analyzing the given input data to provide an helpful response to the user query.
+
+# USER QUERY
+{query}
+
+# Context:
+{context}
+
+
+
+# INSTRUCTIONS
+Your goal is to provide a response to the user query using the relevant information in the input data:
+- the "Entities" and "Relationships" tables contain high-level information. Use these tables to identify the most important entities and relationships to respond to the query.
+- the "Sources" list contains raw text sources to help answer the query. It may contain noisy data, so pay attention when analyzing it.
+
+Follow these steps:
+1. Read and understand the user query.
+2. Look at the "Entities" and "Relationships" tables to get a general sense of the data and understand which information is the most relevant to answer the query.
+3. Carefully analyze all the "Sources" to get more detailed information. Information could be scattered across several sources, use the identified relevant entities and relationships to guide yourself through the analysis of the sources.
+4. While you write the response, you must include inline references to the all the sources you are using by appending `[<source_id>]` at the end of each sentence, where `source_id` is the corresponding source ID from the "Sources" list.
+5. Write the response to the user query - which must include the inline references - based on the information you have gathered. Be very concise and answer the user query directly. If the response cannot be inferred from the input data, just say no relevant information was found. Do not make anything up or add unrelevant information.
+
+Answer:
 """

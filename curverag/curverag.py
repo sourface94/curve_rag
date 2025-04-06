@@ -1,9 +1,10 @@
 from sentence_transformers import SentenceTransformer
 
 from curverag.graph import Graph
+from curverag.prompts import PROMPT
 
 
-class CurveRAG:
+class GraphRAG:
 
     def __init__(self, graph: Graph, embedding_model: str):
         self.embed_model = SentenceTransformer(embedding_model)
@@ -19,6 +20,8 @@ class CurveRAG:
 
         # traverse graph
         nodes_and_relationships = self.graph.traverse(query)
-        prompt = '' # use query and nodes_and_relationships
+        prompt = PROMPT["generate_response_query_with_references"] # use query and nodes_and_relationships
+        prompt_args = {"query": query, "context": str(nodes_and_relationships)}
+        prompt = prompt.format(**prompt_args)
         result = self.llm.generate(prompt)
         return result

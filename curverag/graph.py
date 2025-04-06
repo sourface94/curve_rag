@@ -4,7 +4,7 @@ from typing import List
 from llama_cpp import Llama
 
 from curverag.transformations import chunk_text
-from curverag.prompts import entity_relationship_extraction_disparate_prompt
+from curverag.prompts import PROMPTS
 
 
 @dataclass
@@ -13,6 +13,9 @@ class Node:
     description: str
     alias: List[str]
     attributes: List[str]
+
+    def __str__():
+
 
 
 class Edge:
@@ -143,14 +146,16 @@ def create_graph(texts: List[str], is_narrative: bool = False, llm_model_path=".
     for chunk in texts:
         sub_graph = llm(
             # TODO: fix this prompt, use outlines
-            entity_relationship_extraction_disparate_prompt + chunk, # Prompt
+            PROMPTS["entity_relationship_extraction_disparate_prompt"] + chunk, # Prompt
             max_tokens=max_tokens,
             echo=True # Echo the prompt back in the output
         ) # Generate a completion, can also call create_completion
         graph.upsert(sub_graph)
 
+    return graph
 
-def learn_embeddings():
+
+def learn_embeddings(graph: Graph):
     return NotImplementedError
 
 
