@@ -94,6 +94,7 @@ dependencies = [
     { name = "llama-cpp-python" },
     { name = "semchunk" },
     { name = "sentence-transformers" },
+    { name = "tqdm" },
 ]
 
 [package.metadata]
@@ -101,6 +102,7 @@ requires-dist = [
     { name = "llama-cpp-python", specifier = ">=0.3.8" },
     { name = "semchunk", specifier = ">=3.2.1" },
     { name = "sentence-transformers", specifier = ">=4.0.1" },
+    { name = "tqdm", specifier = ">=4.67.1" },
 ]
 
 [[package]]

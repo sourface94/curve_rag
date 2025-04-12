@@ -1,36 +1,33 @@
-from dataclasses import dataclass
-from typing import List
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
+import llama_cpp
+from outlines import generate, models
 from llama_cpp import Llama
 
 from curverag.transformations import chunk_text
 from curverag.prompts import PROMPTS
 
 
-@dataclass
-class Node:
-    id: str
-    description: str
-    alias: List[str]
-    attributes: List[str]
+class Node(BaseModel):
+    id: str = Field(..., description="Unique identifier of the node")
+    description: str = Field(..., description="Descritpion of the node")
+    alias: List[str] = Field(..., description="Other names used to identify the node")
+    attributes: List[str] = Field(..., description="Attributes used to describe the node")
 
-    def __str__():
-
-
-
-class Edge:
-    node_1_id: str
-    node_2_id: str
-    name: str
-    direction: bool
-    description: str
-    attributes: List[str]
+class Edge(BaseModel):
+    source: str = Field(..., description="Unique source of the edge")
+    target: str = Field(..., description="Unique source of the edge")
+    name: str = Field(..., description="Description of the edge")
+    is_directed: bool  = Field(..., description="If true its a directed edge")
+    description: str = Field(..., description="Description of the node")
+    attributes: List[str] = Field(..., description="Attributes used to describe the ege")
 
 
-class Graph:
-    def __init__(self):
-        self.nodes = []
-        self.edges = []
+class KnowledgeGraph(BaseModel):
+
+    nodes: List[Node] = Field(..., description="List of nodes of the knowledge graph")
+    edges: List[Edge] = Field(..., description="List of edges of the knowledge graph")
 
     def add_node(self, node: Node):
         self.nodes.append(node)
@@ -123,27 +120,42 @@ class Graph:
         # get the top k nodes
         return nearest_nodes + nearest_hop_nodes
 
+def generate_prompt(user_prompt, schema):
+    return (
+        "<|begin_of_text|><|start_header_id|>system<|end_header_id|>"
+       "You are a world class AI model who answers questions in JSON<|eot_id|>"
+        "<|start_header_id|>user<|end_header_id|>"
+        f"Here's the json schema you must adhere to:\n<schema>\n{schema}\n</schema><|im_end|>\n"
+        + user_prompt + "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+    )
 
-def create_graph(texts: List[str], is_narrative: bool = False, llm_model_path="./models/7B/llama-model.gguf", max_tokens=1000):
+def create_graph(texts: List[str], is_narrative: bool = False, llm_model_path="./models/7B/llama-model.gguf", max_tokens=1000, tokenizer: str = Optional[None], n_ctx: int = Optional[None]):
     """
     Create knowledge graph.
 
     Creation of this packages knowledge center
     """
-    
-    # chunk text
-    texts = chunk_text(texts)
 
     # load model
     llm = Llama(
       llm_model_path=llm_model_path,
+      tokenizer=tokenizer
       # n_gpu_layers=-1, # Uncomment to use GPU acceleration
       # seed=1337, # Uncomment to set a specific seed
-      # n_ctx=2048, # Uncomment to increase the context window
+      n_ctx=n_ctx, # Uncomment to increase the context window
     )
+    model = models.LlamaCpp(llm)
+    generator = generate.json(model, KnowledgeGraph)
+    # load graph schema and empty graph
+    schema = KnowledgeGraph.model_json_schema()
+    graph = KnowledgeGraph(nodes=[], edges=[])
 
-    graph = Graph()
+    # chunk text
+    texts = chunk_text(texts)
+
     for chunk in texts:
+        prompt = generate_prompt(chunk)
+        sub_graph = generator(prompt, max_tokens=max_tokens, temperature=0, seed=42)
         sub_graph = llm(
             # TODO: fix this prompt, use outlines
             PROMPTS["entity_relationship_extraction_disparate_prompt"] + chunk, # Prompt
