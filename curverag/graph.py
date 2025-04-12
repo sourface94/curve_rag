@@ -11,13 +11,14 @@ from curverag.prompts import PROMPTS
 
 class Node(BaseModel):
     id: str = Field(..., description="Unique identifier of the node")
-    description: str = Field(..., description="Descritpion of the node")
+    name: str = Field(..., description="Name of the node")
+    description: str = Field(..., description="Description of the node")
     alias: List[str] = Field(..., description="Other names used to identify the node")
     attributes: List[str] = Field(..., description="Attributes used to describe the node")
 
 class Edge(BaseModel):
-    source: str = Field(..., description="Unique source of the edge")
-    target: str = Field(..., description="Unique source of the edge")
+    source: str = Field(..., description="Name of the source edge")
+    target: str = Field(..., description="Name of the target edge")
     name: str = Field(..., description="Description of the edge")
     is_directed: bool  = Field(..., description="If true its a directed edge")
     description: str = Field(..., description="Description of the node")
@@ -37,13 +38,13 @@ class KnowledgeGraph(BaseModel):
 
     def get_matching_node(self, node: Node):
         for n in self.nodes:
-            if n.id == node.id:
+            if node.name == n.name or node.name in n.alias:
                 return n
         return
 
     def get_matching_edge(self, edge: Edge):
-        for e in self.edges:
-            if e.node_1_id == edge.node_1_id and e.node_2_id == edge.node_2_id and  e.name == edge.name and e.direction == edge.direction:
+        for e in self.edges:                
+            if edge.source == e.source and edge.target == e.target and edge.is_directed == e.is_directed and edge.description == e.description:
                 return e
         return
 
@@ -129,22 +130,14 @@ def generate_prompt(user_prompt, schema):
         + user_prompt + "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
     )
 
-def create_graph(texts: List[str], is_narrative: bool = False, llm_model_path="./models/7B/llama-model.gguf", max_tokens=1000, tokenizer: str = Optional[None], n_ctx: int = Optional[None]):
+
+
+
+def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens=1000):
     """
     Create knowledge graph.
-
-    Creation of this packages knowledge center
     """
-
-    # load model
-    llm = Llama(
-      llm_model_path=llm_model_path,
-      tokenizer=tokenizer
-      # n_gpu_layers=-1, # Uncomment to use GPU acceleration
-      # seed=1337, # Uncomment to set a specific seed
-      n_ctx=n_ctx, # Uncomment to increase the context window
-    )
-    model = models.LlamaCpp(llm)
+    
     generator = generate.json(model, KnowledgeGraph)
     # load graph schema and empty graph
     schema = KnowledgeGraph.model_json_schema()
@@ -154,20 +147,14 @@ def create_graph(texts: List[str], is_narrative: bool = False, llm_model_path=".
     texts = chunk_text(texts)
 
     for chunk in texts:
-        prompt = generate_prompt(chunk)
+        prompt = generate_prompt(chunk, schema)
         sub_graph = generator(prompt, max_tokens=max_tokens, temperature=0, seed=42)
-        sub_graph = llm(
-            # TODO: fix this prompt, use outlines
-            PROMPTS["entity_relationship_extraction_disparate_prompt"] + chunk, # Prompt
-            max_tokens=max_tokens,
-            echo=True # Echo the prompt back in the output
-        ) # Generate a completion, can also call create_completion
         graph.upsert(sub_graph)
 
     return graph
 
 
-def learn_embeddings(graph: Graph):
+def learn_embeddings(graph: KnowledgeGraph):
     return NotImplementedError
 
 
