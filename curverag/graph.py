@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
+from tqdm import tqdm
 import llama_cpp
 from outlines import generate, models
 from llama_cpp import Llama
@@ -14,21 +15,24 @@ class Node(BaseModel):
     name: str = Field(..., description="Name of the node")
     description: str = Field(..., description="Description of the node")
     alias: List[str] = Field(..., description="Other names used to identify the node")
-    attributes: List[str] = Field(..., description="Attributes used to describe the node")
+    #attributes: List[str] = Field(..., description="Attributes used to describe the node")
 
 class Edge(BaseModel):
     source: str = Field(..., description="Name of the source edge")
     target: str = Field(..., description="Name of the target edge")
-    name: str = Field(..., description="Description of the edge")
+    name: str = Field(..., description="Name of the relationship for the edge")
     is_directed: bool  = Field(..., description="If true its a directed edge")
-    description: str = Field(..., description="Description of the node")
-    attributes: List[str] = Field(..., description="Attributes used to describe the ege")
+    description: str = Field(..., description="Description of the edge")
+    #attributes: List[str] = Field(..., description="Attributes used to describe the ege")
 
 
 class KnowledgeGraph(BaseModel):
 
     nodes: List[Node] = Field(..., description="List of nodes of the knowledge graph")
     edges: List[Edge] = Field(..., description="List of edges of the knowledge graph")
+
+    def is_empty(self) -> bool:
+        return len(self.nodes) == 0 and len(self.edges) == 0
 
     def add_node(self, node: Node):
         self.nodes.append(node)
@@ -48,10 +52,10 @@ class KnowledgeGraph(BaseModel):
                 return e
         return
 
-    def upsert(self, sub_graph: Graph):
+    def upsert(self, sub_graph: "KnowledgeGraph"):
         if self.is_empty():
             self.nodes = sub_graph.nodes
-            self.relationships = sub_graph.relationships
+            self.edges = sub_graph.edges
             return
     
         for node in sub_graph.nodes:
@@ -96,7 +100,7 @@ class KnowledgeGraph(BaseModel):
         node_ranks = page_rank(...)
 
         # get the top k nodes
-        return nodes[:top_k]
+        return self.nodes[:top_k]
 
 
     def traverse_hyperbolic_embeddings(self, query: str, top_k: int):
@@ -124,16 +128,15 @@ class KnowledgeGraph(BaseModel):
 def generate_prompt(user_prompt, schema):
     return (
         "<|begin_of_text|><|start_header_id|>system<|end_header_id|>"
-       "You are a world class AI model who answers questions in JSON<|eot_id|>"
+       "You are a world class AI model who extracts ndoes and entities from documents for a Knowledge Graph creation task. Put yur reply in JSON<|eot_id|>"
         "<|start_header_id|>user<|end_header_id|>"
         f"Here's the json schema you must adhere to:\n<schema>\n{schema}\n</schema><|im_end|>\n"
+        "Here is the text you must extract nodes and entities for"
         + user_prompt + "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
     )
 
 
-
-
-def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens=1000):
+def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens=1000, chunk_size: int = 1028):
     """
     Create knowledge graph.
     """
@@ -144,12 +147,19 @@ def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens
     graph = KnowledgeGraph(nodes=[], edges=[])
 
     # chunk text
-    texts = chunk_text(texts)
+    texts = chunk_text(texts, chunk_size)
 
-    for chunk in texts:
+    for chunk in tqdm(texts):
         prompt = generate_prompt(chunk, schema)
+        print(prompt)
         sub_graph = generator(prompt, max_tokens=max_tokens, temperature=0, seed=42)
+        print('sub graph', sub_graph)
+        print('----------------------------------------------------------')
         graph.upsert(sub_graph)
+        print('graph', graph)
+        print('----------------------------------------------------------')
+        print('----------------------------------------------------------')
+        print('----------------------------------------------------------')
 
     return graph
 

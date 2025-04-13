@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "llama-cpp-python>=0.3.8",
+    "outlines>=0.2.3",
     "semchunk>=3.2.1",
     "sentence-transformers>=4.0.1",
     "tqdm>=4.67.1",

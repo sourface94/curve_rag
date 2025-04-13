@@ -1,3 +1,5 @@
+from typing import List
+
 import semchunk
 
 def chunk_text(texts: List[str], chunk_size: int):
@@ -8,7 +10,7 @@ def chunk_text(texts: List[str], chunk_size: int):
     """
 
     chunker = semchunk.chunkerify('gpt-4', chunk_size)
-    chunks, offsets = chunker(texts)
+    chunks = chunker(texts)
 
     # NOTE: here we put all texts into a 1d list, which means we arent retaining information within dfocuments
     texts = [j for sub in chunks for j in sub]
