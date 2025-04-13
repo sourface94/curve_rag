@@ -151,13 +151,7 @@ def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens
         prompt = generate_prompt(chunk, schema)
         print(prompt)
         sub_graph = generator(prompt, max_tokens=max_tokens, temperature=0, seed=42)
-        print('sub graph', sub_graph)
-        print('----------------------------------------------------------')
         graph.upsert(sub_graph)
-        print('graph', graph)
-        print('----------------------------------------------------------')
-        print('----------------------------------------------------------')
-        print('----------------------------------------------------------')
 
     return graph
 
