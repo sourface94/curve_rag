@@ -59,12 +59,12 @@ class KnowledgeGraph(BaseModel):
             return
     
         for node in sub_graph.nodes:
-            matching_node = self.get_matching_node()
+            matching_node = self.get_matching_node(node)
             if matching_node is None:
                 self.add_node(node)
 
         for edge in sub_graph.edges:
-            matching_edge = self.get_matching_edge()
+            matching_edge = self.get_matching_edge(edge)
             if matching_edge:
                 self.add_edge(edge)
 
@@ -125,16 +125,14 @@ class KnowledgeGraph(BaseModel):
         # get the top k nodes
         return nearest_nodes + nearest_hop_nodes
 
-def generate_prompt(user_prompt, schema):
-    return (
-        "<|begin_of_text|><|start_header_id|>system<|end_header_id|>"
-       "You are a world class AI model who extracts ndoes and entities from documents for a Knowledge Graph creation task. Put yur reply in JSON<|eot_id|>"
-        "<|start_header_id|>user<|end_header_id|>"
-        f"Here's the json schema you must adhere to:\n<schema>\n{schema}\n</schema><|im_end|>\n"
-        "Here is the text you must extract nodes and entities for"
-        + user_prompt + "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
-    )
 
+def generate_prompt(user_prompt, schema):
+    return f""""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+       You are a world class AI model who extracts ndoes and entities from documents for a Knowledge Graph creation task. Put yur reply in JSON<|eot_id|>
+        <|start_header_id|>user<|end_header_id|>
+        Here's the json schema you must adhere to: <schema>{schema}</schema><|im_end|>
+        Here is the text you must extract nodes and entities for:
+        {user_prompt}"<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
 
 def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens=1000, chunk_size: int = 1028):
     """
