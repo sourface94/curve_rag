@@ -18,8 +18,8 @@ class Node(BaseModel):
     #attributes: List[str] = Field(..., description="Attributes used to describe the node")
 
 class Edge(BaseModel):
-    source: str = Field(..., description="ID of the source node edge")
-    target: str = Field(..., description="ID of the target node edge")
+    source: int = Field(..., description="ID of the source node edge")
+    target: int = Field(..., description="ID of the target node edge")
     name: str = Field(..., description="Name of the relationship for the edge. Maximum of 20 characters.")
     is_directed: bool  = Field(..., description="If true its a directed edge")
     description: str = Field(..., description="A short description of the edge. Maximum of 50 characters.")
@@ -65,7 +65,7 @@ class KnowledgeGraph(BaseModel):
 
         for edge in sub_graph.edges:
             matching_edge = self.get_matching_edge(edge)
-            if matching_edge:
+            if matching_edge is None:
                 self.add_edge(edge)
 
     def traverse(self, query: str):
@@ -126,11 +126,12 @@ class KnowledgeGraph(BaseModel):
         return nearest_nodes + nearest_hop_nodes
 
 
-def generate_prompt(user_prompt, schema):
+def generate_prompt(user_prompt, schema, existing_graph):
     return f""""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-       You are a world class AI model who extracts ndoes and entities from documents for a Knowledge Graph creation task. Put yur reply in JSON<|eot_id|>
+       You are a world class AI model who extracts nodes and entities from documents to add to an exiting Knowledge Graph creation task. Put yur reply in JSON<|eot_id|>
         <|start_header_id|>user<|end_header_id|>
         Here's the json schema you must adhere to: <schema>{schema}</schema><|im_end|>
+        Here is the knowledge graph that you will be adding to: {existing_graph}
         Here is the text you must extract nodes and entities for:
         {user_prompt}"<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
 
@@ -148,9 +149,11 @@ def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens
     texts = chunk_text(texts, chunk_size)
 
     for chunk in tqdm(texts):
-        prompt = generate_prompt(chunk, schema)
+
+        prompt = generate_prompt(chunk, schema, graph.json())
         print(prompt)
         sub_graph = generator(prompt, max_tokens=max_tokens, temperature=0, seed=42)
+        print(sub_graph)
         graph.upsert(sub_graph)
 
     return graph
