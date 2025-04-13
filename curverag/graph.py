@@ -11,25 +11,25 @@ from curverag.prompts import PROMPTS
 
 
 class Node(BaseModel):
-    id: str = Field(..., description="Unique identifier of the node")
-    name: str = Field(..., description="Name of the node")
-    description: str = Field(..., description="Description of the node")
+    id: int = Field(..., description="Unique identifier of the node")
+    name: str = Field(..., description="Name of the node. Maximum of 20 characters.")
+    description: str = Field(..., description="A short description of the node. Maximum of 50 characters.")
     alias: List[str] = Field(..., description="Other names used to identify the node")
     #attributes: List[str] = Field(..., description="Attributes used to describe the node")
 
 class Edge(BaseModel):
-    source: str = Field(..., description="Name of the source edge")
-    target: str = Field(..., description="Name of the target edge")
-    name: str = Field(..., description="Name of the relationship for the edge")
+    source: str = Field(..., description="ID of the source node edge")
+    target: str = Field(..., description="ID of the target node edge")
+    name: str = Field(..., description="Name of the relationship for the edge. Maximum of 20 characters.")
     is_directed: bool  = Field(..., description="If true its a directed edge")
-    description: str = Field(..., description="Description of the edge")
+    description: str = Field(..., description="A short description of the edge. Maximum of 50 characters.")
     #attributes: List[str] = Field(..., description="Attributes used to describe the ege")
 
 
 class KnowledgeGraph(BaseModel):
 
-    nodes: List[Node] = Field(..., description="List of nodes of the knowledge graph")
-    edges: List[Edge] = Field(..., description="List of edges of the knowledge graph")
+    nodes: List[Node] = Field(..., description="List of nodes of the knowledge graph. Maximum of 10 items in this list.", max_length=10)
+    edges: List[Edge] = Field(..., description="List of edges of the knowledge graph. Maximum of 10 items in this list.", max_length=10)
 
     def is_empty(self) -> bool:
         return len(self.nodes) == 0 and len(self.edges) == 0
