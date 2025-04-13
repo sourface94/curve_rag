@@ -157,6 +157,7 @@ def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens
 
 
 def learn_embeddings(graph: KnowledgeGraph):
+    """Learn hyperbolic embeddings"""
     return NotImplementedError
 
 
