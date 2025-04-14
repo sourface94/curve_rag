@@ -125,6 +125,10 @@ class KnowledgeGraph(BaseModel):
         # get the top k nodes
         return nearest_nodes + nearest_hop_nodes
 
+    def learn_embeddings(self):
+        """Learn hyperbolic embeddings"""
+        return NotImplementedError
+
 
 def generate_prompt(user_prompt, schema, existing_graph):
     return f""""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
@@ -134,6 +138,7 @@ def generate_prompt(user_prompt, schema, existing_graph):
         Here is the knowledge graph that you will be adding to: {existing_graph}
         Here is the text you must extract nodes and entities for:
         {user_prompt}"<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
+
 
 def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens=1000, chunk_size: int = 1028):
     """
@@ -159,9 +164,6 @@ def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens
     return graph
 
 
-def learn_embeddings(graph: KnowledgeGraph):
-    """Learn hyperbolic embeddings"""
-    return NotImplementedError
 
 
 

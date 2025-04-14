@@ -4,7 +4,7 @@ from curverag.graph import Graph
 from curverag.prompts import PROMPT
 
 
-class GraphRAG:
+class RAGQuery:
 
     def __init__(self, graph: Graph, embedding_model: str):
         self.embed_model = SentenceTransformer(embedding_model)
