@@ -1,14 +1,16 @@
+import numpy as np
+import torch
 import torch.nn.functional as F
 
 from torch import nn
 
-from curverag.hyperbolic_utils import hyperbolic_distance
+from curverag.hyperbolic_utils import hyperbolic_distance, givens_reflection, givens_rotations, expmap0, project, mobius_add
 
 
-class AttH():
+class AttH(nn.Module):
 
     def __init__(
-        
+        self,
         num_entities: int,
         num_relations: int,
         embedding_dim: int = 100,
@@ -16,15 +18,18 @@ class AttH():
         data_type = torch.float
 
     ):
+        super(AttH, self).__init__()
         self.num_entities = num_entities
         self.num_relations = num_relations
         self.embedding_dim = embedding_dim
+        self.init_size = init_size
+        self.data_type = data_type
 
         # create embeddings for nodes, relations and bias'
         self.entity_emb = nn.Embedding(num_entities, self.embedding_dim)
-        self.entity.weight.data = self.init_size * torch.randn((self.num_entities, self.embedding_dim), dtype=self.data_type)
+        self.entity_emb.weight.data = self.init_size * torch.randn((self.num_entities, self.embedding_dim), dtype=self.data_type)
         self.rel_emb = nn.Embedding(num_relations, self.embedding_dim)
-        self.rel.weight.data = self.init_size * torch.randn((self.num_relations, 2 * self.embedding_dim), dtype=self.data_type)
+        self.rel_emb.weight.data = self.init_size * torch.randn((self.num_relations, 2 * self.embedding_dim), dtype=self.data_type)
 
         self.bias_head = nn.Embedding(self.num_entities, 1)
         self.bias_head.weight.data = torch.zeros((self.num_entities, 1), dtype=self.data_type)
@@ -37,16 +42,16 @@ class AttH():
 
         # create attention embeddings and initialise values
         self.att_rel_emb = nn.Embedding(self.num_relations, 2 * self.embedding_dim)
-        self.att_ rel_emb.weight.data = 2 * torch.rand((self.num_relations, 2 * self.embedding_dim), dtype=self.data_type) - 1.0
+        self.att_rel_emb.weight.data = 2 * torch.rand((self.num_relations, 2 * self.embedding_dim), dtype=self.data_type) - 1.0
         self.context_emb = nn.Embedding(self.num_relations, self.embedding_dim)
         self.context_emb.weight.data = self.init_size * torch.randn((self.num_relations, self.embedding_dim), dtype=self.data_type)
         self.act = nn.Softmax(dim=1)
 
         # used to scale values
         if data_type == "double":
-            self.scale = torch.Tensor([1. / np.sqrt(self.embedding_dim)]).double().cuda()
+            self.scale = torch.Tensor([1. / np.sqrt(self.embedding_dim)]).double()#.cuda()
         else:
-            self.scale = torch.Tensor([1. / np.sqrt(self.embedding_dim)]).cuda()
+            self.scale = torch.Tensor([1. / np.sqrt(self.embedding_dim)])#.cuda()
     
 
     def forward(self, queries, eval_mode=False):
@@ -68,7 +73,7 @@ class AttH():
         rhs_embs, rhs_biases = self.get_rhs(queries, eval_mode)
         
         # get predictions
-        predictions = self.score(lhs_e, lhs_biases, curvatures, rhs_e, rhs_biases, eval_mode)
+        predictions = self.score(lhs_embs, lhs_biases, curvatures, rhs_embs, rhs_biases, eval_mode)
 
         # get factors for regularization
         factors = self.get_factors(queries)
@@ -77,33 +82,45 @@ class AttH():
     def get_queries(self, queries):
         """Compute embedding and biases of queries."""
         c = F.softplus(self.c[queries[:, 1]])
-        head = self.entity(queries[:, 0])
-        rot_mat, ref_mat = torch.chunk(self.rel_diag(queries[:, 1]), 2, dim=1)
-        rot_q = givens_rotations(rot_mat, head).view((-1, 1, self.rank))
-        ref_q = givens_reflection(ref_mat, head).view((-1, 1, self.rank))
+        head = self.entity_emb(queries[:, 0])
+        rot_mat, ref_mat = torch.chunk(self.att_rel_emb(queries[:, 1]), 2, dim=1)
+        rot_q = givens_rotations(rot_mat, head).view((-1, 1, self.embedding_dim))
+        ref_q = givens_reflection(ref_mat, head).view((-1, 1, self.embedding_dim))
         cands = torch.cat([ref_q, rot_q], dim=1)
-        context_vec = self.context_vec(queries[:, 1]).view((-1, 1, self.rank))
-        att_weights = torch.sum(context_vec * cands * self.scale, dim=-1, keepdim=True)
+        context_emb = self.context_emb(queries[:, 1]).view((-1, 1, self.embedding_dim))
+        att_weights = torch.sum(context_emb * cands * self.scale, dim=-1, keepdim=True)
         att_weights = self.act(att_weights)
         att_q = torch.sum(att_weights * cands, dim=1)
         lhs = expmap0(att_q, c)
-        rel, _ = torch.chunk(self.rel(queries[:, 1]), 2, dim=1)
+        rel, _ = torch.chunk(self.rel_emb(queries[:, 1]), 2, dim=1)
         rel = expmap0(rel, c)
         res = project(mobius_add(lhs, rel, c), c)
-        return res, self.bh(queries[:, 0]), c
+        return res, self.bias_head(queries[:, 0]), c
 
     def get_rhs(self, queries, eval_mode):
         """Get embeddings and biases of target entities."""
         if eval_mode:
-            return self.entity.weight, self.bt.weight
+            return self.entity_emb.weight, self.bias_tail.weight
         else:
-            return self.entity(queries[:, 2]), self.bt(queries[:, 2]) # getting index which is tail entity in (h, r, t) triple
+            return self.entity_emb(queries[:, 2]), self.bias_tail(queries[:, 2]) # getting index which is tail entity in (h, r, t) triple
 
+    def get_factors(self, queries):
+        """Computes factors for embeddings' regularization.
 
-    def score(self, lhs_embs, lhs_bias rhs_embs, c, rhs_bias, eval_mode):
+        Args:
+            queries: torch.LongTensor with query triples (head, relation, tail)
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor] with embeddings to regularize
+        """
+        head_emb = self.entity_emb(queries[:, 0])
+        rel_eb = self.rel_emb(queries[:, 1])
+        rhs_emb = self.entity_emb(queries[:, 2])
+        return head_emb, rel_eb, rhs_emb
+
+    
+    def score(self, lhs_embs, lhs_bias, rhs_embs, c, rhs_bias, eval_mode):
         """Get similarity scores or queries against targets in embedding space."""
-        lhs_e, c 
-        distance = hyperbolic_distance(lhs_e, rhs_e, c, eval_mode) ** 2
+        distance = hyperbolic_distance(lhs_embs, rhs_embs, c, eval_mode) ** 2
         if eval_mode:
             return lhs_biases + rhs_biases.t() + score
         else:
