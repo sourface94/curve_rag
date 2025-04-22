@@ -27,7 +27,7 @@ parser.add_argument(
     help="Knowledge Graph dataset"
 )
 parser.add_argument(
-    "--model", default="RotE", choices=all_models, help="Knowledge Graph embedding model"
+    "--model", default="AttH", choices=all_models, help="Knowledge Graph embedding model"
 )
 parser.add_argument(
     "--regularizer", choices=["N3", "F2"], default="N3", help="Regularizer"

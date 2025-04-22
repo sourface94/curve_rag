@@ -1,63 +1,64 @@
-"""Base Knowledge Graph embedding model."""
-from abc import ABC, abstractmethod
-
+"""Hyperbolic Knowledge Graph embedding models where all parameters are defined in tangent spaces."""
+import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
 
+from KGEmb.models.base import KGModel
+from KGEmb.utils.euclidean import 
+from KGEmb.utils.hyperbolic import mobius_add, expmap0, project, hyp_distance_multi_c, givens_rotations, givens_reflection
 
-class KGModel(nn.Module, ABC):
-    """Base Knowledge Graph Embedding model class.
+HYP_MODELS = ["AttH"]
 
-    Attributes:
-        sizes: Tuple[int, int, int] with (n_entities, n_relations, n_entities)
-        rank: integer for embedding dimension
-        dropout: float for dropout rate
-        gamma: torch.nn.Parameter for margin in ranking-based loss
-        data_type: torch.dtype for machine precision (single or double)
-        bias: string for whether to learn or fix bias (none for no bias)
-        init_size: float for embeddings' initialization scale
-        entity: torch.nn.Embedding with entity embeddings
-        rel: torch.nn.Embedding with relation embeddings
-        bh: torch.nn.Embedding with head entity bias embeddings
-        bt: torch.nn.Embedding with tail entity bias embeddings
-    """
+  
+class AttH(nn.Module):
+    """Hyperbolic attention model combining translations, reflections and rotations"""
 
-    def __init__(self, sizes, rank, dropout, gamma, data_type, bias, init_size):
-        """Initialize KGModel."""
-        super(KGModel, self).__init__()
-        if data_type == 'double':
+    def __init__(self, args):
+        super(AttH, self).__init__()
+
+        if args.data_type == 'double':
             self.data_type = torch.double
         else:
             self.data_type = torch.float
-        self.sizes = sizes
-        self.rank = rank
-        self.dropout = dropout
-        self.bias = bias
-        self.init_size = init_size
-        self.gamma = nn.Parameter(torch.Tensor([gamma]), requires_grad=False)
-        self.entity = nn.Embedding(sizes[0], rank)
-        self.rel = nn.Embedding(sizes[1], rank)
-        self.bh = nn.Embedding(sizes[0], 1)
-        self.bh.weight.data = torch.zeros((sizes[0], 1), dtype=self.data_type)
-        self.bt = nn.Embedding(sizes[0], 1)
-        self.bt.weight.data = torch.zeros((sizes[0], 1), dtype=self.data_type)
+        self.sizes = args.sizes
+        self.rank = args.rank
+        self.dropout = args.dropout
+        self.bias = args.bias
+        self.init_size = args.init_size
+        self.gamma = nn.Parameter(torch.Tensor([args.gamma]), requires_grad=False)
+        self.entity = nn.Embedding(args.sizes[0], args.rank)
+        self.rel = nn.Embedding(args.sizes[1], args.rank)
+        self.bh = nn.Embedding(args.sizes[0], 1)
+        self.bh.weight.data = torch.zeros((args.sizes[0], 1), dtype=self.data_type)
+        self.bt = nn.Embedding(args.sizes[0], 1)
+        self.bt.weight.data = torch.zeros((args.sizes[0], 1), dtype=self.data_type)
 
-    @abstractmethod
-    def get_queries(self, queries):
-        """Compute embedding and biases of queries.
+        self.entity.weight.data = self.init_size * torch.randn((self.sizes[0], self.rank), dtype=self.data_type)
+        self.rel.weight.data = self.init_size * torch.randn((self.sizes[1], 2 * self.rank), dtype=self.data_type)
+        self.rel_diag = nn.Embedding(self.sizes[1], self.rank)
+        self.rel_diag.weight.data = 2 * torch.rand((self.sizes[1], self.rank), dtype=self.data_type) - 1.0
+        self.multi_c = args.multi_c
+        if self.multi_c:
+            c_init = torch.ones((self.sizes[1], 1), dtype=self.data_type)
+        else:
+            c_init = torch.ones((1, 1), dtype=self.data_type)
+        self.c = nn.Parameter(c_init, requires_grad=True)
 
-        Args:
-            queries: torch.LongTensor with query triples (head, relation, tail)
-        Returns:
-             lhs_e: torch.Tensor with queries' embeddings (embedding of head entities and relations)
-             lhs_biases: torch.Tensor with head entities' biases
-        """
-        pass
+        self.rel_diag = nn.Embedding(self.sizes[1], 2 * self.rank)
+        self.rel_diag.weight.data = 2 * torch.rand((self.sizes[1], 2 * self.rank), dtype=self.data_type) - 1.0
+        self.context_vec = nn.Embedding(self.sizes[1], self.rank)
+        self.context_vec.weight.data = self.init_size * torch.randn((self.sizes[1], self.rank), dtype=self.data_type)
+        self.act = nn.Softmax(dim=1)
+        if args.dtype == "double":
+            self.scale = torch.Tensor([1. / np.sqrt(self.rank)]).double()#.cuda()
+        else:
+            self.scale = torch.Tensor([1. / np.sqrt(self.rank)])#.cuda()
 
-    @abstractmethod
     def get_rhs(self, queries, eval_mode):
-        """Get embeddings and biases of target entities.
-
+        """
+        Get embeddings and biases of target entities.
+        
         Args:
             queries: torch.LongTensor with query triples (head, relation, tail)
             eval_mode: boolean, true for evaluation, false for training
@@ -69,11 +70,14 @@ class KGModel(nn.Module, ABC):
                          if eval_mode=False returns biases of tail entities (n_queries x 1)
                          else returns biases of all possible entities in the KG dataset (n_entities x 1)
         """
-        pass
+        if eval_mode:
+            return self.entity.weight, self.bt.weight
+        else:
+            return self.entity(queries[:, 2]), self.bt(queries[:, 2])
 
-    @abstractmethod
     def similarity_score(self, lhs_e, rhs_e, eval_mode):
-        """Compute similarity scores or queries against targets in embedding space.
+        """
+        Compute similarity scores or queries against targets in embedding space.
 
         Args:
             lhs_e: torch.Tensor with queries' embeddings
@@ -82,7 +86,36 @@ class KGModel(nn.Module, ABC):
         Returns:
             scores: torch.Tensor with similarity scores of queries against targets
         """
-        pass
+        lhs_e, c = lhs_e
+        return - hyp_distance_multi_c(lhs_e, rhs_e, c, eval_mode) ** 2
+    
+    def get_queries(self, queries):
+        """
+        Compute embedding and biases of queries.
+        
+        Args:
+            queries: torch.LongTensor with query triples (head, relation, tail)
+        Returns:
+             lhs_e: torch.Tensor with queries' embeddings (embedding of head entities and relations)
+             lhs_biases: torch.Tensor with head entities' biases
+        """
+        #print('queries.shape', queries.shape)
+        #print(queries[:, 1])
+        c = F.softplus(self.c[queries[:, 1]])
+        head = self.entity(queries[:, 0])
+        rot_mat, ref_mat = torch.chunk(self.rel_diag(queries[:, 1]), 2, dim=1)
+        rot_q = givens_rotations(rot_mat, head).view((-1, 1, self.rank))
+        ref_q = givens_reflection(ref_mat, head).view((-1, 1, self.rank))
+        cands = torch.cat([ref_q, rot_q], dim=1)
+        context_vec = self.context_vec(queries[:, 1]).view((-1, 1, self.rank))
+        att_weights = torch.sum(context_vec * cands * self.scale, dim=-1, keepdim=True)
+        att_weights = self.act(att_weights)
+        att_q = torch.sum(att_weights * cands, dim=1)
+        lhs = expmap0(att_q, c)
+        rel, _ = torch.chunk(self.rel(queries[:, 1]), 2, dim=1)
+        rel = expmap0(rel, c)
+        res = project(mobius_add(lhs, rel, c), c)
+        return (res, c), self.bh(queries[:, 0])
 
     def score(self, lhs, rhs, eval_mode):
         """Scores queries against targets
@@ -146,7 +179,7 @@ class KGModel(nn.Module, ABC):
         # get factors for regularization
         factors = self.get_factors(queries)
         return predictions, factors
-
+    
     def get_ranking(self, queries, filters, batch_size=1000):
         """Compute filtered ranking of correct entity for evaluation.
 
@@ -181,7 +214,8 @@ class KGModel(nn.Module, ABC):
                 ).cpu()
                 b_begin += batch_size
         return ranks
-
+    
+    
     def compute_metrics(self, examples, filters, batch_size=500):
         """Compute ranking-based evaluation metrics.
     
