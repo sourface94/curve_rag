@@ -4,9 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from KGEmb.models.base import KGModel
-from KGEmb.utils.euclidean import 
-from KGEmb.utils.hyperbolic import mobius_add, expmap0, project, hyp_distance_multi_c, givens_rotations, givens_reflection
+from curverag.atth.utils.hyperbolic import mobius_add, expmap0, project, hyp_distance_multi_c, givens_rotations, givens_reflection
 
 HYP_MODELS = ["AttH"]
 

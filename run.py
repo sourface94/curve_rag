@@ -8,12 +8,12 @@ import os
 import torch
 import torch.optim
 
-import models
-import optimizers.regularizers as regularizers
-from datasets.kg_dataset import KGDataset
-from models import all_models
-from optimizers.kg_optimizer import KGOptimizer
-from utils.train import get_savedir, avg_both, format_metrics, count_params
+from curverag.atth import models
+import curverag.atth.optimizers.regularizers as regularizers
+from curverag.atth.kg_dataset import KGDataset
+from curverag.atth.models import all_models
+from curverag.atth.optimizers.kg_optimizer import KGOptimizer
+from curverag.atth.utils.train import get_savedir, avg_both, format_metrics, count_params
 
 
 DATA_PATH = "./data/"
@@ -85,6 +85,9 @@ parser.add_argument(
 )
 parser.add_argument(
     "--multi_c", action="store_true", help="Multiple curvatures per relation"
+)
+parser.add_argument(
+    "--data_type", choices=["double", "float"], default="double", help="Multiple curvatures per relation"
 )
 
 
