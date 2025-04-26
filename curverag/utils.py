@@ -3,6 +3,8 @@ from typing import List, Optional
 from outlines import generate, models
 from llama_cpp import Llama
 
+from curverag.graph import KnowledgeGraph
+
 
 def load_model(
         llm_model_path: str ="./models/7B/llama-model.gguf",
@@ -23,3 +25,6 @@ def load_model(
     # create outlines model
     model = models.LlamaCpp(llm)
     return model
+
+
+def create_atth_dataset(graph: KnowledgeGraph):

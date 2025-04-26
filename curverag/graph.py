@@ -31,6 +31,7 @@ class KnowledgeGraph(BaseModel):
     nodes: List[Node] = Field(..., description="List of nodes of the knowledge graph. Maximum of 10 items in this list.", max_length=10)
     edges: List[Edge] = Field(..., description="List of edges of the knowledge graph. Maximum of 10 items in this list.", max_length=10)
 
+
     def is_empty(self) -> bool:
         return len(self.nodes) == 0 and len(self.edges) == 0
 
@@ -120,7 +121,6 @@ class KnowledgeGraph(BaseModel):
         
         # get nearest neigbour in a 1 and 2 hop fashion when the neighbours join two entites e.g. is a neighboiur of a neighbour
         nearest_hop_nodes = nn_hop(embeddings, entities_in_graph, hop=2)
-
 
         # get the top k nodes
         return nearest_nodes + nearest_hop_nodes
