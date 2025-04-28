@@ -28,3 +28,8 @@ def load_model(
 
 
 def create_atth_dataset(graph: KnowledgeGraph):
+  nodes_idx = {n: id for i, n.name in enumerate(graph.nodes)}
+  edges_ = set([e.name for e in graph.edges])
+  edges = {e for i, e for e in enumerate(edges_)}
+  relationship_types = {n: id for i, n.name in enumerate(graph.nodes)}
+  
