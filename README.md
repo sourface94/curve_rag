@@ -7,7 +7,7 @@ Steps:
 - Creates embeddings of graph nodes using [Low-Dimensional Hyperbolic Knowledge Graph Embeddings](https://arxiv.org/abs/2005.00545) [6]
 - Allows RAG queries, using graph embeddings to find relevant information
 
-## Usage
+## Usage (To update)
 
 To train and evaluate a KG embedding model for the link prediction task, use the run.py script:
 
