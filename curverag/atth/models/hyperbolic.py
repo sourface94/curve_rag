@@ -204,9 +204,14 @@ class AttH(nn.Module):
 
                 # set filtered and true scores to -1e6 to be ignored
                 for i, query in enumerate(these_queries):
-                    filter_out = filters[(query[0].item(), query[1].item())]
-                    filter_out += [queries[b_begin + i, 2].item()]
-                    scores[i, torch.LongTensor(filter_out)] = -1e6
+                    try:    
+                        filter_out = filters[(query[0].item(), query[1].item())]
+                        filter_out += [queries[b_begin + i, 2].item()]
+                        scores[i, torch.LongTensor(filter_out)] = -1e6
+                        print('got', (query[0].item(), query[1].item()))
+                    except Exception:
+                        print('not got', (query[0].item(), query[1].item()))
+                        continue
                 ranks[b_begin:b_begin + batch_size] += torch.sum(
                     (scores >= targets).float(), dim=1
                 ).cpu()
@@ -231,11 +236,12 @@ class AttH(nn.Module):
 
         for m in ["rhs", "lhs"]:
             q = examples.clone()
+            print(m)
             if m == "lhs":
                 tmp = torch.clone(q[:, 0])
                 q[:, 0] = q[:, 2]
                 q[:, 2] = tmp
-                q[:, 1] += self.sizes[1] // 2
+                #q[:, 1] += self.sizes[1] // 2
             ranks = self.get_ranking(q, filters[m], batch_size=batch_size)
             mean_rank[m] = torch.mean(ranks).item()
             mean_reciprocal_rank[m] = torch.mean(1. / ranks).item()

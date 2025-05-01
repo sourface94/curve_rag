@@ -1,14 +1,16 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
-from tqdm import tqdm
 import llama_cpp
+import numpy as np
+from tqdm import tqdm
 from outlines import generate, models
 from llama_cpp import Llama
 
 from curverag.transformations import chunk_text
 from curverag.prompts import PROMPTS
-
+from curverag.utils import save_kg_dataset, split_triples, generate_to_skip, create_atth_dataset
+from curverag.atth.kg_dataset import KGDataset
 
 class Node(BaseModel):
     id: int = Field(..., description="Unique identifier of the node")
@@ -161,7 +163,19 @@ def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens
         print(sub_graph)
         graph.upsert(sub_graph)
 
+    
     return graph
+
+def create_graph_dataset(graph: KnowledgeGraph, dataset_name: str):
+    triples = create_atth_dataset(graph)
+    train, valid, test = split_triples(triples)
+    all_triples = np.concatenate([train, valid, test], axis=0)
+    to_skip = generate_to_skip(all_triples)
+    
+    save_kg_dataset(all_triples, "./data/" + dataset_name)
+    dataset = KGDataset("./data/" + dataset_name, debug=False)
+
+    return dataset
 
 
 
