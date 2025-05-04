@@ -1,0 +1,24 @@
+[train]
+max_epochs = 50
+valid = 3
+patience = 10 
+batch_size = 1000
+optimizer = "Adagrad"  
+regularizer = "N3"
+reg = 0
+double_neg = true
+neg_sample_size = 50
+learning_rate = 1e-1
+
+[model]
+init_size = 1e-3
+bias = "constant"
+rank = 1000
+gamma = 0
+data_type = "double"
+multi_c = true
+dropout = 0
+
+[dataset]
+name = "medical_docs"
+
