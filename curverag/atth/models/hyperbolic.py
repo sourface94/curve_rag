@@ -46,7 +46,6 @@ class AttH(nn.Module):
         self.rel_diag = nn.Embedding(self.sizes[1], self.rank)
         self.rel_diag.weight.data = 2 * torch.rand((self.sizes[1], self.rank), dtype=self.data_type) - 1.0
         self.multi_c = multi_c
-        print('multi_c', self.multi_c)
         if self.multi_c:
             c_init = torch.ones((self.sizes[1], 1), dtype=self.data_type)
         else:
@@ -107,8 +106,6 @@ class AttH(nn.Module):
              lhs_e: torch.Tensor with queries' embeddings (embedding of head entities and relations)
              lhs_biases: torch.Tensor with head entities' biases
         """
-        #print('queries.shape', queries.shape)
-        #print(queries[:, 1])
         c = F.softplus(self.c[queries[:, 1]])
         head = self.entity(queries[:, 0])
         rot_mat, ref_mat = torch.chunk(self.rel_diag(queries[:, 1]), 2, dim=1)

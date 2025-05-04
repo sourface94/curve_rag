@@ -1,16 +1,34 @@
+from typing import List
+
 from sentence_transformers import SentenceTransformer
 
-from curverag.graph import Graph
-from curverag.prompts import PROMPT
-from curverag.atth.train
+from curverag.prompts import  PROMPTS
+from curverag.atth.train import train
+from curverag.graph import create_graph, create_graph_dataset
 
 
-class RAGQuery:
+class CurveRAG:
 
-    def __init__(self, ll, dataset_name: str, embedding_model: str):
-        self.embed_model = SentenceTransformer(embedding_model)
-        self.llm = ''
-        self.dataset_name = dataset_name
+    def __init__(self, llm):
+        self.llm = llm
+
+    def fit(self, docs: List[str], dataset_name: str):
+        """Training of RAGQuery model
+
+        And Mr RAGQuery said: Thou shalt learn the laws of the vocaublary, learn the words and their relation.
+        """
+
+        # create graph
+        print('creating graph')
+        self.graph = create_graph(self.llm, docs)
+        print('creating dataset')
+        self.dataset = create_graph_dataset(self.graph, dataset_name)
+
+        # create embeddings
+        print('dataset type', type(self.dataset))
+        print('train kg embeddings')
+        self.model = train(self.dataset)
+        
 
     def query(self, query: str):
 
@@ -27,19 +45,6 @@ class RAGQuery:
         prompt = prompt.format(**prompt_args)
         result = self.llm.generate(prompt)
         return result
-
-    def fit(dataset: List[str]):
-        """Training of RAGQuery model
-
-        And Mr RAGQuery said: Thou shalt learn the laws of the vocaublary, learn the words and their relation.
-        """
-
-        # create graph
-        graph = create_graph(self.llm, dataset)
-        dataset = create_graph_dataset(graph, )
-
-        # create embeddings
-        train.train()
 
 
 

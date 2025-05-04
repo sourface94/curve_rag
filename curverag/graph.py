@@ -156,24 +156,20 @@ def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens
     texts = chunk_text(texts, chunk_size)
 
     for chunk in tqdm(texts):
-
         prompt = generate_prompt(chunk, schema, graph.json())
-        print(prompt)
         sub_graph = generator(prompt, max_tokens=max_tokens, temperature=0, seed=42)
-        print(sub_graph)
         graph.upsert(sub_graph)
 
-    
     return graph
 
 def create_graph_dataset(graph: KnowledgeGraph, dataset_name: str):
-    triples = create_atth_dataset(graph)
+    triples, nodes_id_idx, relationship_name_idx = create_atth_dataset(graph)
     train, valid, test = split_triples(triples)
     all_triples = np.concatenate([train, valid, test], axis=0)
     to_skip = generate_to_skip(all_triples)
     
-    save_kg_dataset(all_triples, "./data/" + dataset_name)
-    dataset = KGDataset("./data/" + dataset_name, debug=False)
+    save_kg_dataset(all_triples, nodes_id_idx, relationship_name_idx, "./data/" + dataset_name)
+    dataset = KGDataset("./data/" + dataset_name, debug=False, name=dataset_name)
 
     return dataset
 
