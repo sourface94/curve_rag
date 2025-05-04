@@ -12,5 +12,6 @@ dependencies = [
     "semchunk>=3.2.1",
     "sentence-transformers>=4.0.1",
     "tiktoken>=0.9.0",
+    "toml>=0.10.2",
     "tqdm>=4.67.1",
 ]
