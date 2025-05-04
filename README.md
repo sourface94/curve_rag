@@ -15,6 +15,33 @@ To train and evaluate a KG embedding model for the link prediction task, use the
 usage: python .\run.py --multi_c --debug --max_epoch 3 --dataset dataset_name
 ```
 
+## Config
+
+Valid config values:
+```
+dataset: str = "medical_docs"
+init_size: float = 1e-3
+learning_rate: float = 1e-1
+bias: str = "constant" #"learn"
+rank: int = 1000 # embedding dimensions
+gamma: float = 0
+data_type: str = "double"
+dtype: str = "double"
+debug: bool = True
+multi_c: bool = True
+double_neg: bool True
+neg_sample_size: int = 50
+dropout: float = 0
+max_epochs: int = 50
+valid: float = 3 # number of epochs before validation
+pateince: int = 10 # Number of epochs before early stopping
+batch_size: int = 1000
+optimizer: str = "Adagrad"  #"Adagrad", "Adam", "SparseAdam"
+regularizer: str = "N3" #F2
+reg: float = 0 # regularisation weight
+    "--dataset", default="WN18RR", choices=["FB15K", "WN", "WN18RR", "FB237", "YAGO3-10", "large_dummy_data", "medical_docs"],
+```
+
 ## References
 
 [1] Trouillon, Théo, et al. "Complex embeddings for simple link prediction."
