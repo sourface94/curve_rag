@@ -10,7 +10,7 @@ import torch
 class KGDataset(object):
     """Knowledge Graph dataset class."""
 
-    def __init__(self, data_path, debug):
+    def __init__(self, data_path, debug, name='name'):
         """Creates KG dataset object for data loading.
 
         Args:
@@ -31,6 +31,7 @@ class KGDataset(object):
         max_axis = np.max(self.data["train"], axis=0)
         self.n_entities = int(max(max_axis[0], max_axis[2]) + 1)
         self.n_predicates = int(max_axis[1] + 1) * 2
+        self.name = name
 
     def get_examples(self, split, rel_idx=-1):
         """Get examples in a split.

@@ -1,4 +1,6 @@
 """Hyperbolic Knowledge Graph embedding models where all parameters are defined in tangent spaces."""
+from typing import Tuple
+
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -6,37 +8,45 @@ from torch import nn
 
 from curverag.atth.utils.hyperbolic import mobius_add, expmap0, project, hyp_distance_multi_c, givens_rotations, givens_reflection
 
-HYP_MODELS = ["AttH"]
-
   
 class AttH(nn.Module):
     """Hyperbolic attention model combining translations, reflections and rotations"""
 
-    def __init__(self, args):
+    def __init__(self,
+        sizes: Tuple[int, int, int],
+        init_size: float = 1e-3,
+        bias: str = "constant", #"learn"
+        rank: int = 1000, # embedding dimensions
+        gamma: float = 0,
+        multi_c: bool = True,
+        dropout: float = 0,
+        data_type: str = "double",
+    ):
         super(AttH, self).__init__()
 
-        if args.data_type == 'double':
+        if data_type == 'double':
             self.data_type = torch.double
         else:
             self.data_type = torch.float
-        self.sizes = args.sizes
-        self.rank = args.rank
-        self.dropout = args.dropout
-        self.bias = args.bias
-        self.init_size = args.init_size
-        self.gamma = nn.Parameter(torch.Tensor([args.gamma]), requires_grad=False)
-        self.entity = nn.Embedding(args.sizes[0], args.rank)
-        self.rel = nn.Embedding(args.sizes[1], args.rank)
-        self.bh = nn.Embedding(args.sizes[0], 1)
-        self.bh.weight.data = torch.zeros((args.sizes[0], 1), dtype=self.data_type)
-        self.bt = nn.Embedding(args.sizes[0], 1)
-        self.bt.weight.data = torch.zeros((args.sizes[0], 1), dtype=self.data_type)
+        self.sizes = sizes
+        self.rank = rank
+        self.dropout = dropout
+        self.bias = bias
+        self.init_size = init_size
+        self.gamma = nn.Parameter(torch.Tensor([gamma]), requires_grad=False)
+        self.entity = nn.Embedding(sizes[0], rank)
+        self.rel = nn.Embedding(sizes[1], rank)
+        self.bh = nn.Embedding(sizes[0], 1)
+        self.bh.weight.data = torch.zeros((sizes[0], 1), dtype=self.data_type)
+        self.bt = nn.Embedding(sizes[0], 1)
+        self.bt.weight.data = torch.zeros((sizes[0], 1), dtype=self.data_type)
 
         self.entity.weight.data = self.init_size * torch.randn((self.sizes[0], self.rank), dtype=self.data_type)
         self.rel.weight.data = self.init_size * torch.randn((self.sizes[1], 2 * self.rank), dtype=self.data_type)
         self.rel_diag = nn.Embedding(self.sizes[1], self.rank)
         self.rel_diag.weight.data = 2 * torch.rand((self.sizes[1], self.rank), dtype=self.data_type) - 1.0
-        self.multi_c = args.multi_c
+        self.multi_c = multi_c
+        print('multi_c', self.multi_c)
         if self.multi_c:
             c_init = torch.ones((self.sizes[1], 1), dtype=self.data_type)
         else:
@@ -48,7 +58,7 @@ class AttH(nn.Module):
         self.context_vec = nn.Embedding(self.sizes[1], self.rank)
         self.context_vec.weight.data = self.init_size * torch.randn((self.sizes[1], self.rank), dtype=self.data_type)
         self.act = nn.Softmax(dim=1)
-        if args.data_type == "double":
+        if data_type == "double":
             self.scale = torch.Tensor([1. / np.sqrt(self.rank)]).double()#.cuda()
         else:
             self.scale = torch.Tensor([1. / np.sqrt(self.rank)])#.cuda()

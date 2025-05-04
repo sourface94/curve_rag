@@ -5,94 +5,23 @@ import json
 import logging
 import os
 
+import toml
 import torch
 import torch.optim
 
 from curverag.atth import models
 import curverag.atth.optimizers.regularizers as regularizers
 from curverag.atth.kg_dataset import KGDataset
-from curverag.atth.models import all_models
 from curverag.atth.optimizers.kg_optimizer import KGOptimizer
+from curverag.atth.models.hyperbolic import AttH
 from curverag.atth.utils.train import get_savedir, avg_both, format_metrics, count_params
 
 
-DATA_PATH = "./data/"
+def train(dataset):
+    with open('config.toml', 'r') as f:
+        config = toml.load(f)
 
-
-parser = argparse.ArgumentParser(
-    description="Knowledge Graph Embedding"
-)
-parser.add_argument(
-    "--dataset", default="WN18RR", choices=["FB15K", "WN", "WN18RR", "FB237", "YAGO3-10", "large_dummy_data", "medical_docs"],
-    help="Knowledge Graph dataset"
-)
-parser.add_argument(
-    "--model", default="AttH", choices=all_models, help="Knowledge Graph embedding model"
-)
-parser.add_argument(
-    "--regularizer", choices=["N3", "F2"], default="N3", help="Regularizer"
-)
-parser.add_argument(
-    "--reg", default=0, type=float, help="Regularization weight"
-)
-parser.add_argument(
-    "--optimizer", choices=["Adagrad", "Adam", "SparseAdam"], default="Adagrad",
-    help="Optimizer"
-)
-parser.add_argument(
-    "--max_epochs", default=50, type=int, help="Maximum number of epochs to train for"
-)
-parser.add_argument(
-    "--patience", default=10, type=int, help="Number of epochs before early stopping"
-)
-parser.add_argument(
-    "--valid", default=3, type=float, help="Number of epochs before validation"
-)
-parser.add_argument(
-    "--rank", default=1000, type=int, help="Embedding dimension"
-)
-parser.add_argument(
-    "--batch_size", default=1000, type=int, help="Batch size"
-)
-parser.add_argument(
-    "--neg_sample_size", default=50, type=int, help="Negative sample size, -1 to not use negative sampling"
-)
-parser.add_argument(
-    "--dropout", default=0, type=float, help="Dropout rate"
-)
-parser.add_argument(
-    "--init_size", default=1e-3, type=float, help="Initial embeddings' scale"
-)
-parser.add_argument(
-    "--learning_rate", default=1e-1, type=float, help="Learning rate"
-)
-parser.add_argument(
-    "--gamma", default=0, type=float, help="Margin for distance-based losses"
-)
-parser.add_argument(
-    "--bias", default="constant", type=str, choices=["constant", "learn", "none"], help="Bias type (none for no bias)"
-)
-parser.add_argument(
-    "--dtype", default="double", type=str, choices=["single", "double"], help="Machine precision"
-)
-parser.add_argument(
-    "--double_neg", action="store_true",
-    help="Whether to negative sample both head and tail entities"
-)
-parser.add_argument(
-    "--debug", action="store_true",
-    help="Only use 1000 examples for debugging"
-)
-parser.add_argument(
-    "--multi_c", action="store_true", help="Multiple curvatures per relation"
-)
-parser.add_argument(
-    "--data_type", choices=["double", "float"], default="double", help="Multiple curvatures per relation"
-)
-
-
-def train(dataset, ):
-    save_dir = get_savedir(args.model, args.dataset)
+    save_dir = get_savedir('AttH', dataset.name)
 
     # file logger
     logging.basicConfig(
@@ -110,40 +39,41 @@ def train(dataset, ):
     logging.getLogger("").addHandler(console)
     logging.info("Saving logs in: {}".format(save_dir))
 
-    # create dataset
-    dataset_path = os.path.join(DATA_PATH, args.dataset)
-    dataset = KGDataset(dataset_path, args.debug)
-    args.sizes = dataset.get_shape()
-
-    # load data
+    # get dataset splits
+    sizes = dataset.get_shape()
     logging.info("\t " + str(dataset.get_shape()))
     train_examples = dataset.get_examples("train")
     valid_examples = dataset.get_examples("valid")
     test_examples = dataset.get_examples("test")
     filters = dataset.get_filters()
 
+    config['model']['sizes'] = dataset.get_shape()
+
     # save config
-    with open(os.path.join(save_dir, "config.json"), "w") as fjson:
-        json.dump(vars(args), fjson)
+    with open(os.path.join(save_dir, "config.toml"), "w") as f:
+        toml.dump(config, f)
 
     # create model
-    model = getattr(models, args.model)(args)
+    model = AttH(**config['model'])
+    
     total = count_params(model)
     logging.info("Total number of parameters {}".format(total))
     device = "cuda"
     model#.to(device)
 
     # get optimizer
-    regularizer = getattr(regularizers, args.regularizer)(args.reg)
-    optim_method = getattr(torch.optim, args.optimizer)(model.parameters(), lr=args.learning_rate)
-    optimizer = KGOptimizer(model, regularizer, optim_method, args.batch_size, args.neg_sample_size,
-                            bool(args.double_neg))
+    regularizer = getattr(regularizers, config['train']['regularizer'])(config['train']['reg'])
+    optim_method = getattr(torch.optim, config['train']['optimizer'])(model.parameters(), lr=config['train']['learning_rate'])
+    optimizer = KGOptimizer(model, regularizer, optim_method, config['train']['batch_size'], config['train']['neg_sample_size'],
+                            bool(config['train']['double_neg']))
     counter = 0
     best_mrr = None
     best_epoch = None
     logging.info("\t Start training")
-    for step in range(args.max_epochs):
-
+    max_epochs = config['train']['max_epochs']
+    valid = config['train']['valid']
+    patience = config['train']['patience']
+    for step in range(max_epochs):
         # Train step
         model.train()
         train_loss = optimizer.epoch(train_examples)
@@ -154,7 +84,7 @@ def train(dataset, ):
         valid_loss = optimizer.calculate_valid_loss(valid_examples)
         logging.info("\t Epoch {} | average valid loss: {:.4f}".format(step, valid_loss))
 
-        if (step + 1) % args.valid == 0:
+        if (step + 1) % valid == 0:
             valid_metrics = avg_both(*model.compute_metrics(valid_examples, filters))
             logging.info(format_metrics(valid_metrics, split="valid"))
 
@@ -168,10 +98,10 @@ def train(dataset, ):
                 model#.cuda()
             else:
                 counter += 1
-                if counter == args.patience:
+                if counter == patience:
                     logging.info("\t Early stopping")
                     break
-                elif counter == args.patience // 2:
+                elif counter == patience // 2:
                     pass
                     # logging.info("\t Reducing learning rate")
                     # optimizer.reduce_lr()
@@ -192,8 +122,11 @@ def train(dataset, ):
     # Test metrics
     test_metrics = avg_both(*model.compute_metrics(test_examples, filters))
     logging.info(format_metrics(test_metrics, split="test"))
+
     return model
 
 
 if __name__ == "__main__":
-    train(parser.parse_args())
+    dataset_path = './data/medical_docs'
+    dataset = KGDataset(dataset_path, debug=False, name='medical_docs')
+    train(dataset)
