@@ -15,7 +15,7 @@ import llama_cpp
 from curverag import utils
 from curverag.curverag import CurveRAG
 
-# define curverag LLM and documents 
+# Define curverag LLM and documents 
 max_tokens = 10000
 n_ctx=10000
 docs = [
