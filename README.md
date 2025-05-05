@@ -2,45 +2,49 @@
 
 Rag approach using hyperbolic geometry knowledge graphs.
 
-Steps:
+How it works:
 - Creates graph using an LLM
 - Creates embeddings of graph nodes using [Low-Dimensional Hyperbolic Knowledge Graph Embeddings](https://arxiv.org/abs/2005.00545) [6]
-- Allows RAG queries, using graph embeddings to find relevant information
+- Allows RAG queries, using graph embeddings to find relevant information to use for RAG.
 
-## Usage (To update)
+## Usage
 
-To train and evaluate a KG embedding model for the link prediction task, use the run.py script:
+To train the model and get embeddings for use for RAG use the following:
+```
+import llama_cpp
+from curverag import utils
+from curverag.curverag import CurveRAG
 
-```bash
-usage: python .\run.py --multi_c --debug --max_epoch 3 --dataset dataset_name
+# define curverag LLM and documents 
+max_tokens = 10000
+n_ctx=10000
+docs = [
+    "....",
+    "....",
+    ...
+]
+model = utils.load_model(
+    llm_model_path="./models/Meta-Llama-3-8B-Instruct.Q6_K.gguf",
+    tokenizer=llama_cpp.llama_tokenizer.LlamaHFTokenizer.from_pretrained("unsloth/Llama-3.2-1B-Instruct"),
+    n_ctx=n_ctx,
+    max_tokens=max_tokens
+)
+
+# Train CurveRAG model
+rag = CurveRAG(llm=model)
+rag.fit(docs, dataset_name='test_run')
+
+# Get node ID to embedding index mapping
+nodes_id_idx = rag.dataset.nodes_id_idx
+
+# Get node embeddings for node with ID 1
+node_embs = rag.model.entity.weight.data.cpu().numpy()
+node_embs[nodes_id_idx[1]]
 ```
 
 ## Config
 
-Valid config values:
-```
-dataset: str = "medical_docs"
-init_size: float = 1e-3
-learning_rate: float = 1e-1
-bias: str = "constant" #"learn"
-rank: int = 1000 # embedding dimensions
-gamma: float = 0
-data_type: str = "double"
-dtype: str = "double"
-debug: bool = True
-multi_c: bool = True
-double_neg: bool True
-neg_sample_size: int = 50
-dropout: float = 0
-max_epochs: int = 50
-valid: float = 3 # number of epochs before validation
-pateince: int = 10 # Number of epochs before early stopping
-batch_size: int = 1000
-optimizer: str = "Adagrad"  #"Adagrad", "Adam", "SparseAdam"
-regularizer: str = "N3" #F2
-reg: float = 0 # regularisation weight
-    "--dataset", default="WN18RR", choices=["FB15K", "WN", "WN18RR", "FB237", "YAGO3-10", "large_dummy_data", "medical_docs"],
-```
+Model config settins are defined in the `config.toml` file
 
 ## References
 
