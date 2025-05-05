@@ -32,18 +32,25 @@ class CurveRAG:
 
     def query(self, query: str):
 
-        # embed query
-        query = self.embed_model.encode()
+        # get query entites
+
+        # get nodes that match entities from graph
+
+        # traverse graph and get all other related nodes and entities
+        nodes_and_relationships = self.graph.traverse(query)
+
+        # add descriptions of nodes and entities to prompt, along with query 
+        prompt_args = {"query": query, "context": str(nodes_and_relationships)}
+        prompt = PROMPT["generate_response_query_with_references"] # use query and nodes_and_relationships
+        prompt = prompt.format(**prompt_args)
+
+        # query llm and return result
+        result = self.llm.generate(prompt)
 
         # classify query type
 
-
         # traverse graph
-        nodes_and_relationships = self.graph.traverse(query)
-        prompt = PROMPT["generate_response_query_with_references"] # use query and nodes_and_relationships
-        prompt_args = {"query": query, "context": str(nodes_and_relationships)}
-        prompt = prompt.format(**prompt_args)
-        result = self.llm.generate(prompt)
+        
         return result
 
 
