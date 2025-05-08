@@ -130,9 +130,14 @@ class KnowledgeGraph(BaseModel):
 
         return node_nn_ids
 
-    def learn_embeddings(self):
-        """Learn hyperbolic embeddings"""
-        return NotImplementedError
+    def get_subgraph(self, node_ids: List[int]):
+        nodes = [n for n in self.nodes if n.id in node_ids]
+        edges = []
+        return KnowledgeGraph(nodes=nodes, edges=edges)
+
+    def __str__(self):
+        description = "This graph has the follow nodes"
+        return description
 
 
 def generate_prompt(user_prompt, schema, existing_graph):

@@ -58,7 +58,8 @@ class CurveRAG:
         all_node_embs = model.entity.weight.data[:10]
 
         # traverse graph and get all other related nodes and entities
-        nodes_and_relationships = self.graph.traverse_hyperbolic_embeddings(entity_node_embs, all_node_embs)
+        node_ids = self.graph.traverse_hyperbolic_embeddings(entity_node_embs, all_node_embs)
+        query_graph = self.graph.get_subgraph(list(set(node_ids+[n.id for n in graph_entities])))
 
         # add descriptions of nodes and entities to prompt, along with query 
         prompt_args = {"query": query, "context": str(nodes_and_relationships)}
