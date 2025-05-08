@@ -11,6 +11,8 @@ from curverag.transformations import chunk_text
 from curverag.prompts import PROMPTS
 from curverag.utils import save_kg_dataset, split_triples, generate_to_skip, create_atth_dataset
 from curverag.atth.kg_dataset import KGDataset
+from curverag.atth.utils.hyperbolic import hyp_distance
+
 
 class Node(BaseModel):
     id: int = Field(..., description="Unique identifier of the node")
@@ -73,8 +75,6 @@ class KnowledgeGraph(BaseModel):
 
     def traverse(self, query: str):
         """Traverse using custom traverse algorithm"""
-        # get each entity in the query using gliner
-        entities = get_entities(query)
         
         # look for entities as nodes in the graph
         entities_in_graph = get_nodes_by_name(entities)
@@ -106,26 +106,40 @@ class KnowledgeGraph(BaseModel):
         return self.nodes[:top_k]
 
 
-    def traverse_hyperbolic_embeddings(self, query: str, top_k: int):
+    def traverse_hyperbolic_embeddings(self, node_embeddings, top_k: int):
         """Traverse using hyperbolic embeddings"""
         
-        # get each entity in the query using gliner
-        entities = get_entities(query)
-        
-        # look for entities as nodes in the graph
-        entities_in_graph = get_nodes_by_name(entities)
+        # get nearest neighbours using embeddings and hyperbolic_distance
 
-        # get embeddings
-        embeddings = node_embeddings()
-        
-        # get nerest neighburs using embeddings
-        nearest_nodes = nn(embeddings, entities_in_graph)
-        
-        # get nearest neigbour in a 1 and 2 hop fashion when the neighbours join two entites e.g. is a neighboiur of a neighbour
-        nearest_hop_nodes = nn_hop(embeddings, entities_in_graph, hop=2)
+        # get all edges hat connect any of the nodes
 
         # get the top k nodes
-        return nearest_nodes + nearest_hop_nodes
+        return nearest_nodes + nodes
+
+    import torch
+
+    def traverse_hyperbolic_embeddings(self, node_embeddings, all_embeddings, top_k: int, threshold: float = 0.7, curvature: float: 1.0):
+        """Traverse using hyperbolic embeddings"""
+        # node_embeddings: dict {node_id: embedding (torch.Tensor)}
+        # Assume all embeddings have same dimension
+
+        # Collect all embeddings and node ids
+        all_node_embbedings = get_node_embeddings()
+        
+        # Get curvature value c (assume c=1.0 here, or retrieve from model/config if available)
+        c = torch.tensor([curvature], dtype=embeddings.dtype, device=embeddings.device)
+
+        all_distances = hyp_distance(entities_embs_1, entities_embs_2, c, eval_mode=True)
+
+        node_nn_ids = []
+        for distances in all_distances:
+            scores, indices = torch.topk(distances[2], 5, largest=False)
+            mask = scores > threshold
+            filtered_vals = scores[mask]
+            filtered_indices = indices[mask]
+            node_ids.append(filtered_indices)
+
+        return node_nn_ids
 
     def learn_embeddings(self):
         """Learn hyperbolic embeddings"""
