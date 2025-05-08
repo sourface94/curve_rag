@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
+import torch
 import llama_cpp
 import numpy as np
 from tqdm import tqdm
@@ -106,19 +107,7 @@ class KnowledgeGraph(BaseModel):
         return self.nodes[:top_k]
 
 
-    def traverse_hyperbolic_embeddings(self, node_embeddings, top_k: int):
-        """Traverse using hyperbolic embeddings"""
-        
-        # get nearest neighbours using embeddings and hyperbolic_distance
-
-        # get all edges hat connect any of the nodes
-
-        # get the top k nodes
-        return nearest_nodes + nodes
-
-    import torch
-
-    def traverse_hyperbolic_embeddings(self, node_embeddings, all_embeddings, top_k: int, threshold: float=0.7, curvature: float=1.0):
+    def traverse_hyperbolic_embeddings(self, node_embeddings: torch.Tensor, all_embeddings: torch.Tensor, top_k: int, threshold: float=0.7, curvature: float=1.0):
         """Traverse using hyperbolic embeddings"""
         # node_embeddings: dict {node_id: embedding (torch.Tensor)}
         # Assume all embeddings have same dimension
