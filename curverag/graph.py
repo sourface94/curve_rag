@@ -118,7 +118,7 @@ class KnowledgeGraph(BaseModel):
 
     import torch
 
-    def traverse_hyperbolic_embeddings(self, node_embeddings, all_embeddings, top_k: int, threshold: float = 0.7, curvature: float: 1.0):
+    def traverse_hyperbolic_embeddings(self, node_embeddings, all_embeddings, top_k: int, threshold: float=0.7, curvature: float=1.0):
         """Traverse using hyperbolic embeddings"""
         # node_embeddings: dict {node_id: embedding (torch.Tensor)}
         # Assume all embeddings have same dimension
