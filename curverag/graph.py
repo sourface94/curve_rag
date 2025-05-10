@@ -33,8 +33,8 @@ class Edge(BaseModel):
 
 class KnowledgeGraph(BaseModel):
 
-    nodes: List[Node] = Field(..., description="List of nodes of the knowledge graph. Maximum of 10 items in this list.", max_length=10)
-    edges: List[Edge] = Field(..., description="List of edges of the knowledge graph. Maximum of 10 items in this list.", max_length=10)
+    nodes: List[Node] = Field(..., description="List of nodes of the knowledge graph. Maximum of 10 items in this list.")
+    edges: List[Edge] = Field(..., description="List of edges of the knowledge graph. Maximum of 10 items in this list.")
 
 
     def is_empty(self) -> bool:
@@ -107,37 +107,72 @@ class KnowledgeGraph(BaseModel):
         return self.nodes[:top_k]
 
 
-    def traverse_hyperbolic_embeddings(self, node_embeddings: torch.Tensor, all_embeddings: torch.Tensor, top_k: int, threshold: float=0.7, curvature: float=1.0):
+    def traverse_hyperbolic_embeddings(self, node_embeddings: torch.Tensor, all_embeddings: torch.Tensor, top_k: int=3, threshold: float=0.7, curvature: float=1.0):
         """Traverse using hyperbolic embeddings"""
-        # node_embeddings: dict {node_id: embedding (torch.Tensor)}
-        # Assume all embeddings have same dimension
-
-        # Collect all embeddings and node ids
-        all_node_embbedings = get_node_embeddings()
         
         # Get curvature value c (assume c=1.0 here, or retrieve from model/config if available)
-        c = torch.tensor([curvature], dtype=embeddings.dtype, device=embeddings.device)
+        c = torch.tensor([curvature], dtype=node_embeddings.dtype, device=node_embeddings.device)
 
-        all_distances = hyp_distance(entities_embs_1, entities_embs_2, c, eval_mode=True)
+        all_distances = hyp_distance(node_embeddings, all_embeddings, c, eval_mode=True)
 
         node_nn_ids = []
         for distances in all_distances:
-            scores, indices = torch.topk(distances[2], 5, largest=False)
+            scores, indices = torch.topk(distances, top_k, largest=False)
             mask = scores > threshold
             filtered_vals = scores[mask]
             filtered_indices = indices[mask]
-            node_ids.append(filtered_indices)
+            node_nn_ids.append(filtered_indices)
 
         return node_nn_ids
 
     def get_subgraph(self, node_ids: List[int]):
         nodes = [n for n in self.nodes if n.id in node_ids]
         edges = []
+        for e in self.edges:
+            if e.source in node_ids and e.target in node_ids:
+                edges.append(e)
         return KnowledgeGraph(nodes=nodes, edges=edges)
 
+
     def __str__(self):
-        description = "This graph has the follow nodes"
-        return description
+        lines = []
+        lines.append("KnowledgeGraph Overview")
+        lines.append(f"  There are {len(self.nodes)} entities and {len(self.edges)} relationships in this graph.\n")
+
+        # Nodes section
+        lines.append("Entities in the graph:")
+        for node in self.nodes:
+            lines.append(f"  • '{node.name}':")
+            lines.append(f"      The entity has the following description: {node.description}")
+            if node.alias:
+                lines.append(f"      It can also be referred to as: {', '.join(node.alias)}")
+
+        # Relationships section
+        lines.append("\nRelationships between nodes:")
+        seen = set()
+        node_id_to_name = {n.id: n.name for n in self.nodes}
+        for edge in self.edges:
+            # For undirected, sort ids to avoid repeats
+            if not edge.is_directed:
+                key = tuple(sorted([edge.source, edge.target])) + (edge.name,)
+            else:
+                key = (edge.source, edge.target, edge.name)
+            if key in seen:
+                continue
+            seen.add(key)
+            src_name = node_id_to_name.get(edge.source, str(edge.source))
+            tgt_name = node_id_to_name.get(edge.target, str(edge.target))
+            if edge.is_directed:
+                lines.append(
+                    f"  • There is a directed relationship from '{src_name}' to '{tgt_name}' called '{edge.name}'."
+                )
+            else:
+                lines.append(
+                    f"  • There is an undirected relationship between '{src_name}' and '{tgt_name}' called '{edge.name}'."
+                )
+            lines.append(f"      The relationship is described as: {edge.description}")
+
+        return "\n".join(lines)
 
 
 def generate_prompt(user_prompt, schema, existing_graph):

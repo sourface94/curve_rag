@@ -24,8 +24,8 @@ def load_model(
       # seed=1337,
     )
     # create outlines model
-    model = models.LlamaCpp(llm)
-    return model
+    outlines_model = models.LlamaCpp(llm)
+    return llm, outlines_model
 
 
 def create_atth_dataset(graph):
