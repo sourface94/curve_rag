@@ -17,7 +17,8 @@ class CurveRAG:
 
     def __init__(
         self,
-        llm, outlines_llm,
+        llm,
+        outlines_llm,
         entity_types: List[str] = DEFAULT_ENTITY_TYPES,
         gliner_model_name: str = DEFAULT_GLINER_MODEL,
         sentence_transformer_model_name: str=DEFAULT_SENTENCE_TRANSFORMER_MODEL
