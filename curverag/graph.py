@@ -33,8 +33,8 @@ class Edge(BaseModel):
 
 class KnowledgeGraph(BaseModel):
 
-    nodes: List[Node] = Field(..., description="List of nodes of the knowledge graph. Maximum of 10 items in this list.")
-    edges: List[Edge] = Field(..., description="List of edges of the knowledge graph. Maximum of 10 items in this list.")
+    nodes: List[Node] = Field(..., description="List of nodes of the knowledge graph. Maximum of 10 items in this list.", max_length=10)
+    edges: List[Edge] = Field(..., description="List of edges of the knowledge graph. Maximum of 10 items in this list.", max_length=10)
 
 
     def is_empty(self) -> bool:

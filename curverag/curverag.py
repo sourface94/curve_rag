@@ -68,7 +68,7 @@ class CurveRAG:
 
         # create graph
         print('creating graph')
-        self.graph = create_graph(self.llm, docs)
+        self.graph = create_graph(self.outlines_llm, docs)
         print('creating dataset')
         self.dataset = create_graph_dataset(self.graph, dataset_name)
 
@@ -83,6 +83,8 @@ class CurveRAG:
     def query(self, query: str, additional_entity_types: Optional[List[str]]=None, threshold: float = 0.4, max_tokens: int = 100):
 
         # get query entites
+        if not additional_entity_types:
+            additional_entity_types = []
         all_entity_types = self.entity_types + additional_entity_types
         entities = self.gliner_model.predict_entities(query, all_entity_types, threshold=threshold)
         entities = [e['text'] for e in entities]

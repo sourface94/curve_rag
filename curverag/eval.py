@@ -40,14 +40,13 @@ def evaluation(cg: CurveRAG, context: List[str], queries: List[str], expected_ou
 
 if __name__ == "__main__":
     max_tokens = 10000
-    n_ctx = 
+    n_ctx = 1000
     model = utils.load_model(
         llm_model_path="./models/Meta-Llama-3-8B-Instruct.Q6_K.gguf",
         tokenizer=llama_cpp.llama_tokenizer.LlamaHFTokenizer.from_pretrained("unsloth/Llama-3.2-1B-Instruct"),
         n_ctx=n_ctx,
         max_tokens=max_tokens
     )
-    
 
-    evaluation([context], queries, expected_output):
+    evaluation([context], queries, expected_output)
     
