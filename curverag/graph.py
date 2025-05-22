@@ -20,7 +20,7 @@ class Node(BaseModel):
     name: str = Field(..., description="Name of the node. Maximum of 20 characters.")
     description: str = Field(..., description="A short description of the node. Maximum of 50 characters.")
     alias: List[str] = Field(..., description="Other names used to identify the node")
-    #attributes: List[str] = Field(..., description="Attributes used to describe the node")
+    additional_information: List[str] = Field(..., description="A list of additional pieces of information about the node that further describes it", max_length=5)
 
 class Edge(BaseModel):
     source: int = Field(..., description="ID of the source node edge")
@@ -28,7 +28,7 @@ class Edge(BaseModel):
     name: str = Field(..., description="Name of the relationship for the edge. Maximum of 20 characters.")
     is_directed: bool  = Field(..., description="If true its a directed edge")
     description: str = Field(..., description="A short description of the edge. Maximum of 50 characters.")
-    #attributes: List[str] = Field(..., description="Attributes used to describe the ege")
+    notes: List[str] = Field(..., description="A list of additional pieces of information about the edge that further describes it", max_length=5)
 
 
 class KnowledgeGraph(BaseModel):
@@ -146,6 +146,9 @@ class KnowledgeGraph(BaseModel):
             lines.append(f"      The entity has the following description: {node.description}")
             if node.alias:
                 lines.append(f"      It can also be referred to as: {', '.join(node.alias)}")
+            print('***************************************!!******************************')
+            if node.alias:
+                lines.append(f"      It has the following notes: {', '.join(node.notes)}")
 
         # Relationships section
         lines.append("\nRelationships between nodes:")
@@ -171,6 +174,7 @@ class KnowledgeGraph(BaseModel):
                     f"  • There is an undirected relationship between '{src_name}' and '{tgt_name}' called '{edge.name}'."
                 )
             lines.append(f"      The relationship is described as: {edge.description}")
+            lines.append(f"      The relationship has the following notes: {', '.join(edge.notes)}")
 
         return "\n".join(lines)
 
