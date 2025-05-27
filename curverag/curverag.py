@@ -69,6 +69,8 @@ class CurveRAG:
         # create graph
         print('creating graph')
         self.graph = create_graph(self.outlines_llm, docs)
+        print('num nodes', len(self.graph.nodes))
+        print('unique node ids', set([n.id for n in self.graph.nodes]))
         print('creating dataset')
         self.dataset = create_graph_dataset(self.graph, dataset_name)
 

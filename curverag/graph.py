@@ -52,6 +52,19 @@ class KnowledgeGraph(BaseModel):
                 return n
         return
 
+    def get_matching_node_by_id(self, node_id: int):
+        """Find a node with the given ID in the graph."""
+        for n in self.nodes:
+            if node_id == n.id:
+                return n
+        return None
+
+    def get_next_node_id(self):
+        """Return the next available node ID."""
+        if not self.nodes:
+            return 0
+        return max(node.id for node in self.nodes) + 1
+
     def get_matching_edge(self, edge: Edge):
         for e in self.edges:                
             if edge.source == e.source and edge.target == e.target and edge.is_directed == e.is_directed and edge.description == e.description:
@@ -59,20 +72,66 @@ class KnowledgeGraph(BaseModel):
         return
 
     def upsert(self, sub_graph: "KnowledgeGraph"):
+        print('upserting')
         if self.is_empty():
             self.nodes = sub_graph.nodes
             self.edges = sub_graph.edges
             return
-    
-        for node in sub_graph.nodes:
-            matching_node = self.get_matching_node(node)
-            if matching_node is None:
-                self.add_node(node)
 
+        # Create a mapping of original subgraph node IDs to potentially new IDs
+        id_mapping = {}
+        
+        # First pass: process nodes and build ID mapping
+        for node in sub_graph.nodes:
+            # Check if a semantically matching node exists
+            matching_node = self.get_matching_node(node)
+            
+            if matching_node is not None:
+                # If we found a semantic match, map the subgraph node ID to the existing node ID
+                id_mapping[node.id] = matching_node.id
+            else:
+                # Check if the node ID already exists in the graph
+                existing_node_with_same_id = self.get_matching_node_by_id(node.id)
+                
+                if existing_node_with_same_id is not None:
+                    # ID conflict: assign a new ID to this node
+                    new_id = self.get_next_node_id()
+                    id_mapping[node.id] = new_id
+                    
+                    # Create a new node with the updated ID
+                    new_node = Node(
+                        id=new_id,
+                        name=node.name,
+                        description=node.description,
+                        alias=node.alias,
+                        additional_information=node.additional_information
+                    )
+                    self.add_node(new_node)
+                else:
+                    # No conflict, add the node as is
+                    id_mapping[node.id] = node.id
+                    self.add_node(node)
+        
+        # Second pass: process edges with updated node IDs
         for edge in sub_graph.edges:
-            matching_edge = self.get_matching_edge(edge)
+            # Update source and target IDs based on the mapping
+            source_id = id_mapping.get(edge.source, edge.source)
+            target_id = id_mapping.get(edge.target, edge.target)
+            
+            # Create a new edge with updated IDs
+            updated_edge = Edge(
+                source=source_id,
+                target=target_id,
+                name=edge.name,
+                is_directed=edge.is_directed,
+                description=edge.description,
+                notes=edge.notes
+            )
+            
+            # Check if this edge already exists
+            matching_edge = self.get_matching_edge(updated_edge)
             if matching_edge is None:
-                self.add_edge(edge)
+                self.add_edge(updated_edge)
 
     def traverse(self, query: str):
         """Traverse using custom traverse algorithm"""
@@ -148,7 +207,7 @@ class KnowledgeGraph(BaseModel):
                 lines.append(f"      It can also be referred to as: {', '.join(node.alias)}")
             print('***************************************!!******************************')
             if node.alias:
-                lines.append(f"      It has the following notes: {', '.join(node.notes)}")
+                lines.append(f"      It has the following additional information: {', '.join(node.additional_information)}")
 
         # Relationships section
         lines.append("\nRelationships between nodes:")

@@ -1,6 +1,6 @@
 # Curve RAG
 
-Rag approach using hyperbolic geometry knowledge graphs.
+Rag approach using hyperbolic knowledge graphs.
 
 How it works:
 - Creates graph using an LLM

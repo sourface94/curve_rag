@@ -35,6 +35,7 @@ class AttH(nn.Module):
         self.init_size = init_size
         self.gamma = nn.Parameter(torch.Tensor([gamma]), requires_grad=False)
         self.entity = nn.Embedding(sizes[0], rank)
+        print('entity shape in init', self.entity.weight.shape)
         self.rel = nn.Embedding(sizes[1], rank)
         self.bh = nn.Embedding(sizes[0], 1)
         self.bh.weight.data = torch.zeros((sizes[0], 1), dtype=self.data_type)
@@ -42,6 +43,7 @@ class AttH(nn.Module):
         self.bt.weight.data = torch.zeros((sizes[0], 1), dtype=self.data_type)
 
         self.entity.weight.data = self.init_size * torch.randn((self.sizes[0], self.rank), dtype=self.data_type)
+        print('entity shape in init', self.entity.weight.shape)
         self.rel.weight.data = self.init_size * torch.randn((self.sizes[1], 2 * self.rank), dtype=self.data_type)
         self.rel_diag = nn.Embedding(self.sizes[1], self.rank)
         self.rel_diag.weight.data = 2 * torch.rand((self.sizes[1], self.rank), dtype=self.data_type) - 1.0
@@ -107,6 +109,8 @@ class AttH(nn.Module):
              lhs_biases: torch.Tensor with head entities' biases
         """
         c = F.softplus(self.c[queries[:, 1]])
+        print('queries[:, 0]', queries[:, 0])
+        print('self.entity', self.entity.weight.shape)
         head = self.entity(queries[:, 0])
         rot_mat, ref_mat = torch.chunk(self.rel_diag(queries[:, 1]), 2, dim=1)
         rot_q = givens_rotations(rot_mat, head).view((-1, 1, self.rank))
@@ -248,7 +252,7 @@ class AttH(nn.Module):
                 tmp = torch.clone(q[:, 0])
                 q[:, 0] = q[:, 2]
                 q[:, 2] = tmp
-                #q[:, 1] += self.sizes[1] // 2
+                q[:, 1] += self.sizes[1] // 2
             ranks = self.get_ranking(q, filters[m], batch_size=batch_size)
             mean_rank[m] = torch.mean(ranks).item()
             mean_reciprocal_rank[m] = torch.mean(1. / ranks).item()

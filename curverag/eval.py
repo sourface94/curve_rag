@@ -5,10 +5,10 @@ from curverag.curverag import CurveRAG
 
 queries = [
     'How old is Jack?',
-    'What gender is Jill?'
+    'What gender is Jill?',
     'Give me the character arc of Sam',
     'What location is the story set in',
-    'Tell me how old Jack is, what the gender of Jill is, and then give me the character arcs of Sam and where the stoty is set'
+    'Tell me how old Jack is, what the gender of Jill is, and then give me the character arcs of Sam and where the story is set',
     'Give me a summary of the story',
 ]
 
