@@ -47,6 +47,7 @@ class KnowledgeGraph(BaseModel):
         self.edges.append(edge)
 
     def get_matching_node(self, node: Node):
+        # TODO: resolve this with an LLM
         for n in self.nodes:
             if node.name == n.name or node.name in n.alias:
                 return n
@@ -66,6 +67,7 @@ class KnowledgeGraph(BaseModel):
         return max(node.id for node in self.nodes) + 1
 
     def get_matching_edge(self, edge: Edge):
+        # TODO: check if edge description is similar for cases wherd the description is semantically the same, but isn't an exact match
         for e in self.edges:                
             if edge.source == e.source and edge.target == e.target and edge.is_directed == e.is_directed and edge.description == e.description:
                 return e
@@ -89,6 +91,13 @@ class KnowledgeGraph(BaseModel):
             if matching_node is not None:
                 # If we found a semantic match, map the subgraph node ID to the existing node ID
                 id_mapping[node.id] = matching_node.id
+                # update alias' for node
+                all_node_names = [node.name] + node.alias
+                for name in all_node_names:
+                    if name not in matching_node.alias:
+                        matching_node.alias.append(name)
+                # concatenate new description for node TODO: Use an LLM to refine the description after concatenating
+                matching_node.description += ' ' + node.description
             else:
                 # Check if the node ID already exists in the graph
                 existing_node_with_same_id = self.get_matching_node_by_id(node.id)
@@ -244,7 +253,7 @@ def generate_prompt(user_prompt, schema, existing_graph):
         <|start_header_id|>user<|end_header_id|>
         Here's the json schema you must adhere to: <schema>{schema}</schema><|im_end|>
         Here is the knowledge graph that you will be adding to: {existing_graph}
-        Here is the text you must extract nodes and entities for:
+        Here is the text you must extract nodes and entities for, if a node seems to already be in the exisitng graph then give the node the same name and ID:
         {user_prompt}"<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
 
 
@@ -261,10 +270,20 @@ def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens
     # chunk text
     texts = chunk_text(texts, chunk_size)
 
-    for chunk in tqdm(texts):
+    for i, chunk in enumerate(tqdm(texts)):
+        tries = 0
+        success = False
         prompt = generate_prompt(chunk, schema, graph.json())
-        sub_graph = generator(prompt, max_tokens=max_tokens, temperature=0, seed=42)
-        graph.upsert(sub_graph)
+        while tries < 3 and success is False: # if creation of the subgrah has failed less than 3 times, then retry it. Otherwise skip this chunk
+            try:
+                sub_graph = generator(prompt, max_tokens=max_tokens, temperature=0, seed=42)
+                graph.upsert(sub_graph)
+                success = True
+            except Exception:
+                tries += 1
+
+        if success is False and tries <= 3:
+            print(f'Failed to process chunk {i}: ', chunk)
 
     return graph
 
