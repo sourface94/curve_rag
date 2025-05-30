@@ -89,6 +89,7 @@ def train(dataset):
             logging.info(format_metrics(valid_metrics, split="valid"))
 
             valid_mrr = valid_metrics["MRR"]
+            logging.info("\t Epoch {} | average valid mmr: {:.4f}".format(step, valid_mrr))
             if not best_mrr or valid_mrr > best_mrr:
                 best_mrr = valid_mrr
                 counter = 0
@@ -127,6 +128,6 @@ def train(dataset):
 
 
 if __name__ == "__main__":
-    dataset_path = './data/medical_docs'
-    dataset = KGDataset(dataset_path, debug=False, name='medical_docs')
+    dataset_path = './data/movies'
+    dataset = KGDataset(dataset_path, debug=False, name='movies')
     train(dataset)

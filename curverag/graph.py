@@ -4,6 +4,7 @@ from typing import List, Optional
 import torch
 import llama_cpp
 import numpy as np
+from openai import OpenAI
 from tqdm import tqdm
 from outlines import generate, models
 from llama_cpp import Llama
@@ -22,6 +23,7 @@ class Node(BaseModel):
     alias: List[str] = Field(..., description="Other names used to identify the node")
     additional_information: List[str] = Field(..., description="A list of additional pieces of information about the node that further describes it", max_length=5)
 
+
 class Edge(BaseModel):
     source: int = Field(..., description="ID of the source node edge")
     target: int = Field(..., description="ID of the target node edge")
@@ -35,7 +37,6 @@ class KnowledgeGraph(BaseModel):
 
     nodes: List[Node] = Field(..., description="List of nodes of the knowledge graph. Maximum of 10 items in this list.", max_length=10)
     edges: List[Edge] = Field(..., description="List of edges of the knowledge graph. Maximum of 10 items in this list.", max_length=10)
-
 
     def is_empty(self) -> bool:
         return len(self.nodes) == 0 and len(self.edges) == 0
@@ -186,6 +187,7 @@ class KnowledgeGraph(BaseModel):
         node_nn_ids = []
         for distances in all_distances:
             scores, indices = torch.topk(distances, top_k, largest=False)
+            print('scores', scores)
             mask = scores > threshold
             filtered_vals = scores[mask]
             filtered_indices = indices[mask]
@@ -199,7 +201,7 @@ class KnowledgeGraph(BaseModel):
         for e in self.edges:
             if e.source in node_ids and e.target in node_ids:
                 edges.append(e)
-        return KnowledgeGraph(nodes=nodes, edges=edges)
+        return KnowledgeGraph.construct(nodes=nodes, edges=edges)
 
 
     def __str__(self):
@@ -215,7 +217,7 @@ class KnowledgeGraph(BaseModel):
             if node.alias:
                 lines.append(f"      It can also be referred to as: {', '.join(node.alias)}")
             print('***************************************!!******************************')
-            if node.alias:
+            if node.additional_information:
                 lines.append(f"      It has the following additional information: {', '.join(node.additional_information)}")
 
         # Relationships section
@@ -257,7 +259,20 @@ def generate_prompt(user_prompt, schema, existing_graph):
         {user_prompt}"<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
 
 
-def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens=1000, chunk_size: int = 1028):
+def generate_openai_system_prompt(existing_graph):
+    return f""""
+       You are a world class AI model who extracts nodes and entities from documents to add to an exiting Knowledge Graph creation task.
+       
+        Here is the knowledge graph that you will be adding to: {existing_graph}"""
+
+
+def generate_openai_user_prompt(chunk):
+    return f""""
+        Here is the text you must extract nodes and entities for, if a node seems to already be in the existing graph then give the node the same name and ID:
+        {chunk}"""
+
+
+def create_graph_outlines(model, texts: List[str], is_narrative: bool = False, max_tokens=1000, chunk_size: int = 5000):
     """
     Create knowledge graph.
     """
@@ -280,6 +295,44 @@ def create_graph(model, texts: List[str], is_narrative: bool = False, max_tokens
                 graph.upsert(sub_graph)
                 success = True
             except Exception:
+                tries += 1
+
+        if success is False and tries <= 3:
+            print(f'Failed to process chunk {i}: ', chunk)
+
+    return graph
+
+
+def create_graph_openai(client, texts: List[str], is_narrative: bool = False, max_tokens=1000, chunk_size: int = 1028, model: str = "gpt-4o-mini"):
+    """
+    Create knowledge graph.
+    """
+    graph = KnowledgeGraph(nodes=[], edges=[])
+
+    # chunk text
+    texts = chunk_text(texts, chunk_size)
+
+    for i, chunk in enumerate(tqdm(texts)):
+        tries = 0
+        success = False
+        while tries < 3 and success is False: # if creation of the subgrah has failed less than 3 times, then retry it. Otherwise skip this chunk
+            try:
+                response = client.responses.parse(
+                    model=model,
+                    input=[
+                        {"role": "system", "content": generate_openai_system_prompt(graph.json())},
+                        {
+                            "role": "user",
+                            "content": generate_openai_user_prompt(chunk),
+                        },
+                    ],
+                    text_format=KnowledgeGraph,
+                )
+                sub_graph = response.output_parsed
+                graph.upsert(sub_graph)
+                success = True
+            except Exception:
+                print(f'Failed to process chunk {i}, retrying: ', chunk)
                 tries += 1
 
         if success is False and tries <= 3:

@@ -1,5 +1,5 @@
 [train]
-max_epochs = 3
+max_epochs = 20
 valid = 3
 patience = 10 
 batch_size = 1000
