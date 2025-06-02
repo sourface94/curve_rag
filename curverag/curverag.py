@@ -133,7 +133,7 @@ class CurveRAG:
         """
         print('embedding_idx',  embedding_idx, [], len(embedding_idx[0]))
         if len(embedding_idx[0]) == 0:
-            print("Found no embedding indx for entities, doing non KGRAG result")
+            print("Found no embedding indx for entities, doing non KG-RAG result")
             return "N/A"
         entity_node_embs = self.graph_embedding_model.entity.weight.data[embedding_idx]
         
