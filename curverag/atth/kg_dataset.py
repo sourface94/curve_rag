@@ -33,12 +33,15 @@ class KGDataset(object):
         self.n_predicates = int(max_axis[1] + 1) * 2
         self.name = name
 
-        file_path = os.path.join(self.data_path, "nodes_id_idx.pickle")
-        with open(file_path, "rb") as in_file:
-            self.nodes_id_idx = pkl.load(in_file)
-        file_path = os.path.join(self.data_path, "relationship_name_idx.pickle")
-        with open(file_path, "rb") as in_file:
-            self.relationship_name_idx = pkl.load(in_file)
+        try:
+            file_path = os.path.join(self.data_path, "nodes_id_idx.pickle")
+            with open(file_path, "rb") as in_file:
+                self.nodes_id_idx = pkl.load(in_file)
+            file_path = os.path.join(self.data_path, "relationship_name_idx.pickle")
+            with open(file_path, "rb") as in_file:
+                self.relationship_name_idx = pkl.load(in_file)
+        except:
+            pass
 
 
     def get_examples(self, split, rel_idx=-1):

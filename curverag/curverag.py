@@ -7,7 +7,7 @@ from sentence_transformers import SentenceTransformer
 from curverag.prompts import  PROMPTS
 from curverag.atth.train import train
 from curverag.graph import create_graph_outlines, create_graph_openai, create_graph_dataset
-
+from curverag.atth.kg_dataset import KGDataset
 
 DEFAULT_ENTITY_TYPES = ["person", "location", "entity", "organisation"]
 DEFAULT_GLINER_MODEL = "urchade/gliner_medium-v2.1"
@@ -98,6 +98,19 @@ class CurveRAG:
         self.graph_embedding_model = train(self.dataset)
         self.node_sentence_embeddings = self.sentence_model.encode([n.name for n in self.graph.nodes])
         
+
+    def fit(self, dataset: KGDataset):
+        """Training of RAGQuery model
+
+        And Mr RAGQuery said: Thou shalt learn the laws of the vocaublary, learn the words and their relation.
+        """
+
+
+        # TODO: enchance graph with general knowledge that the LLM has - how can we do this?
+
+        # create embeddings
+        print('train kg embeddings')
+        self.graph_embedding_model = train(dataset)        
 
     def query(self, query: str, additional_entity_types: Optional[List[str]]=None, threshold: float = 0.4, max_tokens: int = 100):
 
