@@ -71,6 +71,7 @@ def train(dataset):
     best_epoch = None
     logging.info("\t Start training")
     max_epochs = config['train']['max_epochs']
+    print('max_epochs', max_epochs)
     valid = config['train']['valid']
     patience = config['train']['patience']
     for step in range(max_epochs):
