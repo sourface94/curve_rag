@@ -70,9 +70,7 @@ class CurveRAG:
         inst.graph = graph
         inst.graph_embedding_model = graph_embedding_model
         inst.dataset = dataset
-        return inst
-
-        
+        return inst   
 
     def fit(self, docs: List[str], dataset_name: str):
         """Training of RAGQuery model
@@ -99,7 +97,7 @@ class CurveRAG:
         self.node_sentence_embeddings = self.sentence_model.encode([n.name for n in self.graph.nodes])
         
 
-    def fit(self, dataset: KGDataset):
+    def fit_(self, dataset: KGDataset):
         """Training of RAGQuery model
 
         And Mr RAGQuery said: Thou shalt learn the laws of the vocaublary, learn the words and their relation.
@@ -177,8 +175,7 @@ class CurveRAG:
         prompt = PROMPTS["generate_response_query_with_references"] # use query and query_graph
         prompt = prompt.format(**prompt_args)
         print(prompt)
-        if True:
-            return ""
+
         if self.using_openai:
             result = self.openai_client.responses.create(
                 model=self.openai_model,
