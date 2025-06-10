@@ -124,7 +124,7 @@ def train(dataset):
     # Test metrics
     test_metrics = avg_both(*model.compute_metrics(test_examples, filters))
     logging.info(format_metrics(test_metrics, split="test"))
-
+    print('returning model')
     return model
 
 

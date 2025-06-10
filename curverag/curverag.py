@@ -110,7 +110,8 @@ class CurveRAG:
 
         # create embeddings
         print('train kg embeddings')
-        self.graph_embedding_model = train(dataset)        
+        self.graph_embedding_model = train(dataset) 
+        print(type(self.graph_embedding_model))       
 
     def query(self, query: str, additional_entity_types: Optional[List[str]]=None, threshold: float = 0.4, max_tokens: int = 100):
 
