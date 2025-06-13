@@ -96,14 +96,9 @@ class CurveRAG:
         self.graph_embedding_model = train(self.dataset)
         self.node_sentence_embeddings = self.sentence_model.encode([n.name for n in self.graph.nodes])
         
-
     def fit_(self, dataset: KGDataset):
         """Training of RAGQuery model
-
-        And Mr RAGQuery said: Thou shalt learn the laws of the vocaublary, learn the words and their relation.
         """
-
-
         # TODO: enchance graph with general knowledge that the LLM has - how can we do this?
 
         # create embeddings
@@ -111,7 +106,7 @@ class CurveRAG:
         self.graph_embedding_model = train(dataset) 
         print(type(self.graph_embedding_model))       
 
-    def query(self, query: str, additional_entity_types: Optional[List[str]]=None, threshold: float = 0.4, max_tokens: int = 100):
+    def query(self, query: str, additional_entity_types: Optional[List[str]]=None, threshold: float = 0.4, max_tokens: int = 100, traversal='hyperbolic'):
 
         # get query entites
         if not additional_entity_types:
@@ -121,53 +116,51 @@ class CurveRAG:
         entities = [e['text'] for e in entities]
         print('entities', entities)
 
+        # get all query nodes using sentence tranformer
         query_embeddings = self.sentence_model.encode(entities + [query])
         similarities = self.sentence_model.similarity(query_embeddings, self.node_sentence_embeddings)
         threshold = 0.5
         similar_indices = [list(np.where(sim_row > threshold)[0]) for sim_row in similarities]
         similar_indices = list(set([i for s in similar_indices for i in s]))
-        embedding_idx = [similar_indices]
-        print('similar indices', similar_indices)
+        
+        # map node ids to those in the KnowldgeGraph (self.graph)
         nodes_idx_id = {v: k for k, v in self.dataset.nodes_id_idx.items()}
         node_ids = [nodes_idx_id[s] for s in similar_indices]
-        print('node_ids', node_ids)
         print('graph nodes retrieved', [n.name for n in self.graph.nodes if n.id in node_ids])
-        """
-        # get nodes that match entities from graph
-        graph_entities = []
-        for e in entities:
-            for n in self.graph.nodes:
-                if n.name.lower() == e.lower():
-                    graph_entities.append(n)
-        
-        # get node embeddings
-        embedding_idx = [self.dataset.nodes_id_idx[n.id] for n in graph_entities]
-        """
-        print('embedding_idx',  embedding_idx, [], len(embedding_idx[0]))
-        if len(embedding_idx[0]) == 0:
+
+        if len(similar_indices) == 0:
             print("Found no embedding indx for entities, doing non KG-RAG result")
             return "N/A"
-        entity_node_embs = self.graph_embedding_model.entity.weight.data[embedding_idx]
         
-        #print('entity_node_embs',  entity_node_embs)
 
-        # get all embeddings
-        all_node_embs = self.graph_embedding_model.entity.weight.data
-        #print('all_node_embs', all_node_embs)
 
-        # traverse graph and get all other related nodes and entities
-        similar_node_indexes = self.graph.traverse_hyperbolic_embeddings(entity_node_embs, all_node_embs, threshold=0.6, top_k=5)
+        # get related nodes by trraversing through graph
+        if traversal == 'hyperbolic':
+            embedding_idx = [similar_indices]
+            entity_node_embs = self.graph_embedding_model.entity.weight.data[embedding_idx]
+            # get all embeddings
+            all_node_embs = self.graph_embedding_model.entity.weight.data
+            # print('all_node_embs', all_node_embs)
+            # traverse graph and get all other related nodes and entities
+            similar_node_indexes = self.graph.traverse_hyperbolic_embeddings(entity_node_embs, all_node_embs, threshold=0.6, top_k=5)
+            similar_node_indexes = [i for s in similar_node_indexes for i in s]
+            similar_node_indexes = [n.flatten().tolist() for n in similar_node_indexes]
+        elif traversal == 'pp':
+            similar_node_indexes = self.graph.traverse_personalised_pagerank(node_ids, top_k=5)
+
+
         print('similar_node_indexes', similar_node_indexes)
-        similar_node_indexes = [n.flatten().tolist() for n in similar_node_indexes]
-        similar_node_indexes = [i for s in similar_node_indexes for i in s]
+        
+        
+        # add nodes retrievbd from grpah rtarversal to all nodes that will be added to prompy
         similar_node_ids = [nodes_idx_id[id] for id in similar_node_indexes]
         print('similar_node_ids', similar_node_ids)
         print('similar_node_ids graph nodes retrieved', [n.name for n in self.graph.nodes if n.id in similar_node_ids])
 
         node_ids += similar_node_ids 
         node_ids = list(set(node_ids))
-                            
-        print('node_ids', node_ids)
+
+        # create a subgraph including all nodes we want to add to prompt                            
         query_graph = self.graph.get_subgraph(node_ids)
 
         # add descriptions of nodes and entities to prompt, along with query 

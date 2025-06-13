@@ -160,23 +160,26 @@ class KnowledgeGraph(BaseModel):
 
         return nodes
 
-
-    def traverse_personalised_pagerank(self, query: str, top_k: int):
+    def traverse_personalised_pagerank(self, query_node_ids: List[int], top_k: int):
         """Traverse using personalised pagerank algorithm
         Use either igraph or networkx implementation
         """
-        # get each entity in the query using gliner
-        entities = get_entities(query)
-        
-        # look for entities as nodes in the graph
-        entities_in_graph = get_nodes_by_name(entities)
+        G = nx.Graph()
+        G.add_nodes_from([n.id for n in self.nodes])
+        edges = [(e.source, e.target) for e in self.edges]
+        G.add_edges_from(edges)
 
-        # get the importance of each node
-        node_ranks = page_rank(...)
+        # set peronsalisation
+        #query_nodes_ids = [n.id for n in query_nodes]
+        personalization = {n.id: 1 for n in self.nodes if n.id in query_node_ids}
 
-        # get the top k nodes
-        return self.nodes[:top_k]
+        # calculate page rank
+        pr = nx.pagerank(G, alpha=0.85, personalization=personalization)
 
+        # get top k results
+        pr_sorted = sorted(pr.items(), key=lambda x: x[1], reverse=True)
+        top_node_ids = [i[0] for i in pr_sorted[:top_k]]
+        return top_node_ids
 
     def traverse_hyperbolic_embeddings(self, node_embeddings: torch.Tensor, all_embeddings: torch.Tensor, top_k: int=3, threshold: float=0.7, curvature: float=1.0):
         """Traverse using hyperbolic embeddings"""
@@ -204,7 +207,6 @@ class KnowledgeGraph(BaseModel):
             if e.source in node_ids and e.target in node_ids:
                 edges.append(e)
         return KnowledgeGraph.construct(nodes=nodes, edges=edges)
-
 
     def __str__(self):
         lines = []
