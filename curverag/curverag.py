@@ -131,8 +131,6 @@ class CurveRAG:
         if len(similar_indices) == 0:
             print("Found no embedding indx for entities, doing non KG-RAG result")
             return "N/A"
-        
-
 
         # get related nodes by trraversing through graph
         if traversal == 'hyperbolic':
@@ -145,18 +143,13 @@ class CurveRAG:
             similar_node_indexes = self.graph.traverse_hyperbolic_embeddings(entity_node_embs, all_node_embs, threshold=0.6, top_k=5)
             similar_node_indexes = [i for s in similar_node_indexes for i in s]
             similar_node_indexes = [n.flatten().tolist() for n in similar_node_indexes]
+            similar_node_ids = [nodes_idx_id[id] for id in similar_node_indexes]
         elif traversal == 'pp':
-            similar_node_indexes = self.graph.traverse_personalised_pagerank(node_ids, top_k=5)
-
-
-        print('similar_node_indexes', similar_node_indexes)
-        
-        
-        # add nodes retrievbd from grpah rtarversal to all nodes that will be added to prompy
-        similar_node_ids = [nodes_idx_id[id] for id in similar_node_indexes]
+            similar_node_ids = self.graph.traverse_personalised_pagerank(node_ids, top_k=5)
         print('similar_node_ids', similar_node_ids)
         print('similar_node_ids graph nodes retrieved', [n.name for n in self.graph.nodes if n.id in similar_node_ids])
-
+          
+        # add nodes retrieved from grpah rtarversal to all nodes that will be added to prompy
         node_ids += similar_node_ids 
         node_ids = list(set(node_ids))
 
