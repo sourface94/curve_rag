@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 import numpy as np
+import spacy
 from gliner import GLiNER
 from sentence_transformers import SentenceTransformer
 
@@ -24,6 +25,7 @@ class CurveRAG:
         entity_types: List[str] = DEFAULT_ENTITY_TYPES,
         gliner_model_name: str = DEFAULT_GLINER_MODEL,
         sentence_transformer_model_name: str=DEFAULT_SENTENCE_TRANSFORMER_MODEL
+        spacy_model: str="en_core_web_lg"
     ):  
         if openai_client is None and (llm is None or outlines_llm is None):
             raise ValueError("Either an open_ai_client must be provided or both llm and outlines_llm must be provided")
@@ -45,6 +47,7 @@ class CurveRAG:
         self.graph_embedding_model = None
         self.dataset = None
         self.sentence_model = SentenceTransformer(sentence_transformer_model_name)
+        self.spacy_nlp = spacy.load("en_core_web_lg")
 
     @classmethod
     def load_class(
@@ -105,6 +108,16 @@ class CurveRAG:
         print('train kg embeddings')
         self.graph_embedding_model = train(dataset) 
         print(type(self.graph_embedding_model))       
+
+
+    def get_query_entities(self):
+        # get gliner entites
+        if not additional_entity_types:
+            additional_entity_types = []
+        all_entity_types = self.entity_types + additional_entity_types
+        entities = self.gliner_model.predict_entities(query, all_entity_types, threshold=threshold)
+        entities = [e['text'] for e in entities]
+        print('entities', entities)
 
     def query(self, query: str, additional_entity_types: Optional[List[str]]=None, threshold: float = 0.4, max_tokens: int = 100, traversal='hyperbolic'):
 
