@@ -130,6 +130,38 @@ class KnowledgeGraph(BaseModel):
             source_id = id_mapping.get(edge.source, edge.source)
             target_id = id_mapping.get(edge.target, edge.target)
             
+            # Check if both source and target nodes exist in the graph
+            source_node = self.get_matching_node_by_id(source_id)
+            target_node = self.get_matching_node_by_id(target_id)
+            
+            # If either node is missing, try to find a semantically matching node
+            if source_node is None:
+                # Create a temporary node with the ID we're looking for
+                temp_source = next((n for n in sub_graph.nodes if n.id == edge.source), None)
+                if temp_source is not None:
+                    matching_node = self.get_matching_node(temp_source)
+                    if matching_node is not None:
+                        source_id = matching_node.id
+                        source_node = matching_node
+                        print(f"Mapped source node {edge.source} to semantically matching node {source_id}")
+            
+            if target_node is None:
+                # Create a temporary node with the ID we're looking for
+                temp_target = next((n for n in sub_graph.nodes if n.id == edge.target), None)
+                if temp_target is not None:
+                    matching_node = self.get_matching_node(temp_target)
+                    if matching_node is not None:
+                        target_id = matching_node.id
+                        target_node = matching_node
+                        print(f"Mapped target node {edge.target} to semantically matching node {target_id}")
+            
+            # If we still can't find matching nodes, skip this edge
+            if source_node is None or target_node is None:
+                print(f"Warning: Skipping edge {edge.name} - "
+                    f"Source node {edge.source} exists: {source_node is not None}, "
+                    f"Target node {edge.target} exists: {target_node is not None}")
+                continue
+
             # Create a new edge with updated IDs
             updated_edge = Edge(
                 source=source_id,
