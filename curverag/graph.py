@@ -159,14 +159,24 @@ class KnowledgeGraph(BaseModel):
         nodes = self.weighted_traverse(entities, entities_in_graph)
 
         return nodes
+    
+    def get_weight_val(self, edge_type: str, edge_types: List[str]):
+        if edge_type in edge_types:
+            return 2
+        return 1
 
-    def traverse_personalised_pagerank(self, query_node_ids: List[int], top_k: int):
+    def traverse_personalised_pagerank(self, query_node_ids: List[int], top_k: int, edge_types: List[str]):
         """Traverse using personalised pagerank algorithm
         Use either igraph or networkx implementation
         """
-        G = nx.Graph()
+        G = nx.DiGraph()
         G.add_nodes_from([n.id for n in self.nodes])
-        edges = [(e.source, e.target) for e in self.edges]
+        if edge_types: 
+            edges = [(e.source, e.target, {'e_type':e.name, 'weight':self.get_weight_val(e.name, edge_types)}) for e in self.edges]
+            edges = [(e.target, e.source, {'e_type':e.name, 'weight':self.get_weight_val(e.name, edge_types)}) for e in self.edges]
+        else:
+            edges = [(e.source, e.target) for e in self.edges]
+            edges = [(e.target, e.source) for e in self.edges]
         G.add_edges_from(edges)
 
         # set peronsalisation
@@ -174,7 +184,10 @@ class KnowledgeGraph(BaseModel):
         personalization = {n.id: 1 for n in self.nodes if n.id in query_node_ids}
 
         # calculate page rank
-        pr = nx.pagerank(G, alpha=0.85, personalization=personalization)
+        if edge_types:
+            pr = nx.pagerank(G, alpha=0.85, personalization=personalization, weight='weight')
+        else:
+            pr = nx.pagerank(G, alpha=0.85, personalization=personalization)
 
         # get top k results
         pr_sorted = sorted(pr.items(), key=lambda x: x[1], reverse=True)
@@ -221,7 +234,7 @@ class KnowledgeGraph(BaseModel):
             if node.alias:
                 lines.append(f"      It can also be referred to as: {', '.join(node.alias)}")
             print('***************************************!!******************************')
-            if node.additional_information:
+            if len(node.additional_information) > 0:
                 lines.append(f"      It has the following additional information: {', '.join(node.additional_information)}")
 
         # Relationships section

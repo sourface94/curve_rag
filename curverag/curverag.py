@@ -24,7 +24,7 @@ class CurveRAG:
         outlines_llm=None,
         entity_types: List[str] = DEFAULT_ENTITY_TYPES,
         gliner_model_name: str = DEFAULT_GLINER_MODEL,
-        sentence_transformer_model_name: str=DEFAULT_SENTENCE_TRANSFORMER_MODEL
+        sentence_transformer_model_name: str=DEFAULT_SENTENCE_TRANSFORMER_MODEL,
         spacy_model: str="en_core_web_lg"
     ):  
         if openai_client is None and (llm is None or outlines_llm is None):
@@ -47,7 +47,7 @@ class CurveRAG:
         self.graph_embedding_model = None
         self.dataset = None
         self.sentence_model = SentenceTransformer(sentence_transformer_model_name)
-        self.spacy_nlp = spacy.load("en_core_web_lg")
+        self.spacy_nlp = spacy.load(spacy_model)
 
     @classmethod
     def load_class(
@@ -86,7 +86,7 @@ class CurveRAG:
         if self.using_openai:
             self.graph = create_graph_openai(self.openai_client, docs, model=self.openai_model)
         else:
-            self.graph = create_graph(self.outlines_llm, docs)
+            self.graph = create_graph_outlines(self.outlines_llm, docs)
         print('num nodes', len(self.graph.nodes))
         print('unique node ids', set([n.id for n in self.graph.nodes]))
         print('creating dataset')
@@ -110,7 +110,7 @@ class CurveRAG:
         print(type(self.graph_embedding_model))       
 
 
-    def get_query_entities(self):
+    def get_query_entities(self, query, threshold, additional_entity_types):
         # get gliner entites
         if not additional_entity_types:
             additional_entity_types = []
@@ -119,17 +119,41 @@ class CurveRAG:
         entities = [e['text'] for e in entities]
         print('entities', entities)
 
-    def query(self, query: str, additional_entity_types: Optional[List[str]]=None, threshold: float = 0.4, max_tokens: int = 100, traversal='hyperbolic'):
+        query_sp = self.spacy_nlp(query)
+        pos_tags = []
+        for token in query_sp:
+            print(token.text, token.pos_, token.tag_)
+            if token.pos_ == 'VERB' or token.pos_ == 'NOUN' or token.pos_ == 'PROPN':
+                pos_tags.append(token.text)
+        print('pos_tags', pos_tags)
+        entities += pos_tags
+        return entities
+    
+    def get_edge_types(self, entities):
+        print('entites for edges', entities)
+        entities = self.sentence_model.encode(entities)
+        edges = self.sentence_model.encode([e.name for e in self.graph.edges])
+        similarities = self.sentence_model.similarity(edges, entities)
+        #print('similarities', similarities)
+        threshold = 0.5
+        similar_indices = [list(np.where(sim_row > threshold)[0]) for sim_row in similarities]
+        similar_indices = list(set([i for s in similar_indices for i in s]))
+        similar_edges = [e.name for i, e in enumerate(self.graph.edges) if i in similar_indices]
+        print('similar_edges', similar_edges)
+        return similar_edges
+    
+    def query(self,
+        query: str,
+        additional_entity_types: Optional[List[str]]=None,
+        threshold: float = 0.4,
+        max_tokens: int = 100,
+        traversal='hyperbolic',
+        top_k: int = 10
+    ):
 
-        # get query entites
-        if not additional_entity_types:
-            additional_entity_types = []
-        all_entity_types = self.entity_types + additional_entity_types
-        entities = self.gliner_model.predict_entities(query, all_entity_types, threshold=threshold)
-        entities = [e['text'] for e in entities]
-        print('entities', entities)
+        entities = self.get_query_entities(query, threshold, additional_entity_types)
 
-        # get all query nodes using sentence tranformer
+        # get all query nodes using sentence transformer
         query_embeddings = self.sentence_model.encode(entities + [query])
         similarities = self.sentence_model.similarity(query_embeddings, self.node_sentence_embeddings)
         threshold = 0.5
@@ -153,12 +177,13 @@ class CurveRAG:
             all_node_embs = self.graph_embedding_model.entity.weight.data
             # print('all_node_embs', all_node_embs)
             # traverse graph and get all other related nodes and entities
-            similar_node_indexes = self.graph.traverse_hyperbolic_embeddings(entity_node_embs, all_node_embs, threshold=0.6, top_k=5)
-            similar_node_indexes = [i for s in similar_node_indexes for i in s]
-            similar_node_indexes = [n.flatten().tolist() for n in similar_node_indexes]
+            similar_node_indexes = self.graph.traverse_hyperbolic_embeddings(entity_node_embs, all_node_embs, threshold=0.6, top_k=top_k)
+            similar_node_indexes = [int(i) for s in similar_node_indexes for i in s]
+            similar_node_indexes = list(set(similar_node_indexes))
             similar_node_ids = [nodes_idx_id[id] for id in similar_node_indexes]
         elif traversal == 'pp':
-            similar_node_ids = self.graph.traverse_personalised_pagerank(node_ids, top_k=5)
+            edge_types = self.get_edge_types(entities)
+            similar_node_ids = self.graph.traverse_personalised_pagerank(node_ids, top_k=top_k, edge_types=edge_types)
         print('similar_node_ids', similar_node_ids)
         print('similar_node_ids graph nodes retrieved', [n.name for n in self.graph.nodes if n.id in similar_node_ids])
           
