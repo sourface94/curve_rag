@@ -265,7 +265,6 @@ class KnowledgeGraph(BaseModel):
             lines.append(f"      The entity has the following description: {node.description}")
             if node.alias:
                 lines.append(f"      It can also be referred to as: {', '.join(node.alias)}")
-            print('***************************************!!******************************')
             if len(node.additional_information) > 0:
                 lines.append(f"      It has the following additional information: {', '.join(node.additional_information)}")
 

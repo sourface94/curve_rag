@@ -98,7 +98,8 @@ class CurveRAG:
         print('train kg embeddings')
         self.graph_embedding_model = train(self.dataset)
         self.node_sentence_embeddings = self.sentence_model.encode([n.name for n in self.graph.nodes])
-        
+        self.edge_sentence_embeddings = self.sentence_model.encode([self.get_edge_description(self.graph, e) for e in self.graph.edges])
+
     def fit_(self, dataset: KGDataset):
         """Training of RAGQuery model
         """
@@ -108,7 +109,6 @@ class CurveRAG:
         print('train kg embeddings')
         self.graph_embedding_model = train(dataset) 
         print(type(self.graph_embedding_model))       
-
 
     def get_query_entities(self, query, threshold, additional_entity_types):
         # get gliner entites
@@ -129,6 +129,9 @@ class CurveRAG:
         entities += pos_tags
         return entities
     
+    def get_edge_description(self, graph, edge):
+        return graph.get_matching_node_by_id(edge.source).name + " has a relationship with " + graph.get_matching_node_by_id(edge.target).name + " called " + edge.name + " and desribed as: " + edge.description 
+
     def get_edge_types(self, entities):
         print('entites for edges', entities)
         entities = self.sentence_model.encode(entities)
@@ -146,6 +149,7 @@ class CurveRAG:
         query: str,
         additional_entity_types: Optional[List[str]]=None,
         threshold: float = 0.4,
+        edge_threshold = 0.7,
         max_tokens: int = 100,
         traversal='hyperbolic',
         top_k: int = 10
@@ -156,7 +160,6 @@ class CurveRAG:
         # get all query nodes using sentence transformer
         query_embeddings = self.sentence_model.encode(entities + [query])
         similarities = self.sentence_model.similarity(query_embeddings, self.node_sentence_embeddings)
-        threshold = 0.5
         similar_indices = [list(np.where(sim_row > threshold)[0]) for sim_row in similarities]
         similar_indices = list(set([i for s in similar_indices for i in s]))
         
@@ -165,6 +168,21 @@ class CurveRAG:
         node_ids = [nodes_idx_id[s] for s in similar_indices]
         print('graph nodes retrieved', [n.name for n in self.graph.nodes if n.id in node_ids])
 
+        # get addditonal query nodes from edges using sentence transformer 
+        similarities = self.sentence_model.similarity(query_embeddings, self.edge_sentence_embeddings)
+        edge_similar_indices = [list(np.where(sim_row > edge_threshold)[0]) for sim_row in similarities]
+        edge_similar_indices = list(set([i for s in similar_indices for i in s]))
+        print('edges retrieved', [n.name for n in self.graph.nodes if n.id in node_ids])
+        for i in edge_similar_indices: # get edge node ids and and idx
+            edge = self.graph.edges[i]
+            node_ids.append(edge.source)
+            similar_indices.append(self.dataset.nodes_id_idx[edge.source])
+
+            node_ids.append(edge.target)
+            similar_indices.append(self.dataset.nodes_id_idx[edge.target])
+
+        similar_indices = list(set(similar_indices))
+        node_ids = list(set(node_ids))
         if len(similar_indices) == 0:
             print("Found no embedding indx for entities, doing non KG-RAG result")
             return "N/A"
