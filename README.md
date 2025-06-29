@@ -1,11 +1,14 @@
 # Curve RAG
 
-Rag approach using hyperbolic knowledge graphs.
+Novel RAG approach using a graph approach using a knowledge graph approach with novel edge weighted personalised page rank and hyperbolic embeddings.
 
-How it works:
+How it works (abbreviated):
 - Creates graph using an LLM
 - Creates embeddings of graph nodes using [Low-Dimensional Hyperbolic Knowledge Graph Embeddings](https://arxiv.org/abs/2005.00545) [6]
-- Allows RAG queries, using graph embeddings to find relevant information to use for RAG.
+- At query time finds relevant nodes and relationships from graph using both personalised page rank and hyperbolic embeddings.
+- Retrieved nodes and embeddings are used as context to LLM
+
+NOTE: Other advances in this approach will be added to the README at a later date
 
 ## Usage
 
@@ -31,51 +34,13 @@ model = utils.load_model(
 )
 
 # Train CurveRAG model
-rag = CurveRAG(llm=model)
-rag.fit(docs, dataset_name='test_run')
+rag = CurveRAG(llm=model) # alternatively can ue openai
+rag.fit(docs, dataset_name='dataset')
 
-# Get node ID to embedding index mapping
-nodes_id_idx = rag.dataset.nodes_id_idx
-
-# Get node embeddings for node with ID 1
-node_embs = rag.model.entity.weight.data.cpu().numpy()
-node_embs[nodes_id_idx[1]]
+rag.query("My query...", traversal = 'pp') # rag query using personalised page rank
+rag.query("My query...", traversal = 'hyperbolic') # rag approach using hyperbolic embeddings
 ```
 
 ## Config
 
 Model config settins are defined in the `config.toml` file
-
-## References
-
-[1] Trouillon, Théo, et al. "Complex embeddings for simple link prediction."
-International Conference on Machine Learning. 2016.
-
-[2] Lacroix, Timothee, et al. "Canonical Tensor Decomposition for Knowledge Base
-Completion." International Conference on Machine Learning. 2018.
-
-[3] Sun, Zhiqing, et al. "Rotate: Knowledge graph embedding by relational
-rotation in complex space." International Conference on Learning
-Representations. 2019.
-
-[4] Bordes, Antoine, et al. "Translating embeddings for modeling
-multi-relational data." Advances in neural information processing systems. 2013.
-
-[5] Balažević, Ivana, et al. "Multi-relational Poincaré Graph Embeddings."
-Advances in neural information processing systems. 2019.
-
-[6] Chami, Ines, et al. "Low-Dimensional Hyperbolic Knowledge Graph Embeddings."
-Annual Meeting of the Association for Computational Linguistics. 2020.
-
-```
-@inproceedings{chami2020low,
-  title={Low-Dimensional Hyperbolic Knowledge Graph Embeddings},
-  author={Chami, Ines and Wolf, Adva and Juan, Da-Cheng and Sala, Frederic and Ravi, Sujith and R{\'e}, Christopher},
-  booktitle={Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics},
-  pages={6901--6914},
-  year={2020}
-}
-```
-
-Some of the code was forked from the original ComplEx-N3 implementation which can be found at: [https://github.com/facebookresearch/kbc](https://github.com/facebookresearch/kbc)
-
