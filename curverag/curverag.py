@@ -74,6 +74,11 @@ class CurveRAG:
         inst.graph_embedding_model = graph_embedding_model
         inst.dataset = dataset
         return inst   
+    
+    def generate_node_embeddings(self):
+        print('graph embeddings done')
+        self.node_sentence_embeddings = self.sentence_model.encode([n.name for n in self.graph.nodes])
+        self.edge_sentence_embeddings = self.sentence_model.encode([self.get_edge_description(self.graph, e) for e in self.graph.edges])
 
     def fit(self, docs: List[str], dataset_name: str):
         """Training of RAGQuery model
@@ -97,7 +102,9 @@ class CurveRAG:
         # create embeddings
         print('train kg embeddings')
         self.graph_embedding_model = train(self.dataset)
+        print('get node sentence embeddings')
         self.node_sentence_embeddings = self.sentence_model.encode([n.name for n in self.graph.nodes])
+        print('get edge sentence embeddings')
         self.edge_sentence_embeddings = self.sentence_model.encode([self.get_edge_description(self.graph, e) for e in self.graph.edges])
 
     def fit_(self, dataset: KGDataset):
@@ -108,7 +115,9 @@ class CurveRAG:
         # create embeddings
         print('train kg embeddings')
         self.graph_embedding_model = train(dataset) 
-        print(type(self.graph_embedding_model))       
+        print(type(self.graph_embedding_model))    
+        self.node_sentence_embeddings = self.sentence_model.encode([n.name for n in self.graph.nodes])
+        self.edge_sentence_embeddings = self.sentence_model.encode([self.get_edge_description(self.graph, e) for e in self.graph.edges])   
 
     def get_query_entities(self, query, threshold, additional_entity_types):
         # get gliner entites
@@ -149,7 +158,7 @@ class CurveRAG:
         query: str,
         additional_entity_types: Optional[List[str]]=None,
         threshold: float = 0.4,
-        edge_threshold = 0.7,
+        edge_threshold = 0.5,
         max_tokens: int = 100,
         traversal='hyperbolic',
         top_k: int = 10
@@ -170,11 +179,14 @@ class CurveRAG:
 
         # get addditonal query nodes from edges using sentence transformer 
         similarities = self.sentence_model.similarity(query_embeddings, self.edge_sentence_embeddings)
+        print('similarities', similarities)
         edge_similar_indices = [list(np.where(sim_row > edge_threshold)[0]) for sim_row in similarities]
-        edge_similar_indices = list(set([i for s in similar_indices for i in s]))
-        print('edges retrieved', [n.name for n in self.graph.nodes if n.id in node_ids])
+        print('edge_similar_indices', edge_similar_indices)
+        edge_similar_indices = list(set([i for s in edge_similar_indices for i in s]))
+        print('edge_similar_indices', edge_similar_indices)
         for i in edge_similar_indices: # get edge node ids and and idx
             edge = self.graph.edges[i]
+            print('edge to add', edge)
             node_ids.append(edge.source)
             similar_indices.append(self.dataset.nodes_id_idx[edge.source])
 
@@ -231,5 +243,3 @@ class CurveRAG:
             result = result['choices'][0]['text']
 
         return result
-
-

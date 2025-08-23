@@ -1,3 +1,6 @@
+import re
+import json
+import string
 from typing import List
 
 from sentence_transformers import SentenceTransformer
@@ -37,6 +40,86 @@ def evaluation(cg: CurveRAG, context: List[str], queries: List[str], expected_ou
         res_emb = st_model.encode(res)
         sim = st_model.similarity([res_emb], [expected_output_emb[i]])
         similarities.append(sim[0])
+        
+
+def normalize_answer(s: str) -> str:
+    """Lower text and remove punctuation, articles and extra whitespace."""
+    def remove_articles(text):
+        return re.sub(r"\b(a|an|the)\b", " ", text)
+
+    def white_space_fix(text):
+        return " ".join(text.split())
+
+    def remove_punc(text):
+        return "".join(ch for ch in text if ch not in set(string.punctuation))
+
+    def lower(text):
+        return text.lower()
+
+    return white_space_fix(remove_articles(remove_punc(lower(s))))
+
+
+def get_tokens(s: str):
+    if not s:
+        return []
+    return normalize_answer(s).split()
+
+
+def compute_f1(prediction: str, ground_truth: str) -> float:
+    pred_tokens = get_tokens(prediction)
+    gold_tokens = get_tokens(ground_truth)
+    common = set(pred_tokens) & set(gold_tokens)
+    num_same = sum(min(pred_tokens.count(w), gold_tokens.count(w)) for w in common)
+    if len(pred_tokens) == 0 or len(gold_tokens) == 0:
+        return int(pred_tokens == gold_tokens)
+    if num_same == 0:
+        return 0.0
+    precision = num_same / len(pred_tokens)
+    recall = num_same / len(gold_tokens)
+    return 2 * precision * recall / (precision + recall)
+
+
+def compute_em(prediction: str, ground_truth: str) -> float:
+    return float(normalize_answer(prediction) == normalize_answer(ground_truth))
+
+
+def compute_em_f1(prediction: str, gold_answers: list[str]) -> tuple[float, float]:
+    """
+    prediction: model output string
+    gold_answers: list of possible correct strings (aliases)
+    Returns: (EM, F1)
+    """
+    em = max(compute_em(prediction, ga) for ga in gold_answers)
+    f1 = max(compute_f1(prediction, ga) for ga in gold_answers)
+    return em, f1
+
+def eval(
+        model: CurveRAG,
+        dataset_path: str = '../datasets/2WikiMultihopQA/new/dev.json',
+        dataset_size: int = 1000,
+        alias_path: str = '../datasets/2WikiMultihopQA/new/id_aliases.json',
+        model_traversal: str = 'pp'
+    ):
+    with open(dataset_path, 'rb') as f:
+        eval_dataset = json.load(f)
+        eval_dataset = eval_dataset[:dataset_size]
+
+    with open(alias_path, 'rb') as f:
+        aliases = json.load(f)
+
+    ems = []
+    f1s = []
+    preds = []
+    for record in eval_dataset:
+        pred = model.query(record['question'], traversal=model_traversal)
+        answer = record['answer']
+        aliases = aliases[record['_id']]
+        answers = [answer] + aliases
+        em, f1 = compute_em_f1(pred, answers)
+        ems.append(em), f1s.append(f1), preds.append(pred) 
+
+    return ems, f1s, preds
+
 
 if __name__ == "__main__":
     max_tokens = 10000
