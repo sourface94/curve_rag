@@ -1,7 +1,9 @@
 import re
 import json
 import string
+from collections import defaultdict
 from typing import List
+
 
 from sentence_transformers import SentenceTransformer
 from curverag.curverag import CurveRAG
@@ -27,20 +29,6 @@ expected_output = [
 context = """
 Jack and Jill are adult siblings. Jakc just turnt 45 years old as it was his birthday 2 days ago and Jill is also 45; you gussed it they are twins. Jack and Jill bumped into their friend Sam and Sam seemed to be very upset. They know Sam has been single for a long time so they told Sam to talk to their friend who they think could be a good match for Sam. One year later and Sam and hey friend were dating and had even moved to Romania in a massive Castle. Sam is very happy now and they have a "happily ever after" story, which is fantastic.
 """
-
-
-def evaluation(cg: CurveRAG, context: List[str], queries: List[str], expected_output: List['str']):
-    cg.fit([context])
-    st_model = SentenceTransformer("all-MiniLM-L6-v2")
-    expected_output_emb = st_model.encode(expected_output)
-
-    similarities = []
-    for i, q in enumerate(queries):
-        res = cg.query(q)
-        res_emb = st_model.encode(res)
-        sim = st_model.similarity([res_emb], [expected_output_emb[i]])
-        similarities.append(sim[0])
-        
 
 def normalize_answer(s: str) -> str:
     """Lower text and remove punctuation, articles and extra whitespace."""
@@ -93,32 +81,41 @@ def compute_em_f1(prediction: str, gold_answers: list[str]) -> tuple[float, floa
     f1 = max(compute_f1(prediction, ga) for ga in gold_answers)
     return em, f1
 
-def eval(
+def evaluation(
         model: CurveRAG,
         dataset_path: str = '../datasets/2WikiMultihopQA/new/dev.json',
         dataset_size: int = 1000,
         alias_path: str = '../datasets/2WikiMultihopQA/new/id_aliases.json',
-        model_traversal: str = 'pp'
+        model_traversal: str = 'pp',
+        query_prompt='generate_response_query'
     ):
+    """
+    Evaluates a CurveRAG model
+    """
+    print('query_prompt', query_prompt)
     with open(dataset_path, 'rb') as f:
         eval_dataset = json.load(f)
         eval_dataset = eval_dataset[:dataset_size]
 
+    aliases = defaultdict(list)
     with open(alias_path, 'rb') as f:
-        aliases = json.load(f)
+        for line in f:
+            record = json.loads(line)
+            aliases[record['Q_id']] += record['aliases'] + record['demonyms']
 
-    ems = []
-    f1s = []
-    preds = []
+    ems, f1s, qs, preds, answers = [], [], [], [], []
     for record in eval_dataset:
-        pred = model.query(record['question'], traversal=model_traversal)
         answer = record['answer']
-        aliases = aliases[record['_id']]
-        answers = [answer] + aliases
-        em, f1 = compute_em_f1(pred, answers)
-        ems.append(em), f1s.append(f1), preds.append(pred) 
+        record_aliases = aliases[record['answer_id']]
+        record_answers = [answer] + record_aliases
 
-    return ems, f1s, preds
+        pred = model.query(record['question'], traversal=model_traversal, query_prompt=query_prompt)
+        
+        em, f1 = compute_em_f1(pred, record_answers)
+        answers.append((record_answers))
+        ems.append(em), f1s.append(f1), preds.append(pred) 
+        qs.append(record['question'])
+    return ems, f1s, qs, preds, answers
 
 
 if __name__ == "__main__":

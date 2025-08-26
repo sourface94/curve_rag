@@ -75,3 +75,31 @@ Follow these steps:
 
 Answer:
 """
+
+PROMPTS["generate_response_query"] = """
+You are a helpful assistant analyzing the given input data to provide an answer to the user query.
+Only include the answer and use as few words as possible in your response. Provide no extra context in your response.
+For example if the question can be answered with a Yes or No, then only respond with that. If the response requires a name, then only respond with the name.
+
+# USER QUERY
+{query}
+
+# Context:
+{context}
+
+
+
+# INSTRUCTIONS
+Your goal is to provide a response to the user query using the relevant information in the input data:
+- the "Entities" and "Relationships" tables contain high-level information. Use these tables to identify the most important entities and relationships to respond to the query.
+- the "Sources" list contains raw text sources to help answer the query. It may contain noisy data, so pay attention when analyzing it.
+
+Follow these steps:
+1. Read and understand the user query.
+2. Look at the "Entities" and "Relationships" tables to get a general sense of the data and understand which information is the most relevant to answer the query.
+3. Carefully analyze all the "Sources" to get more detailed information. Information could be scattered across several sources, use the identified relevant entities and relationships to guide yourself through the analysis of the sources.
+4. While you write the response, you must include inline references to the all the sources you are using by appending `[<source_id>]` at the end of each sentence, where `source_id` is the corresponding source ID from the "Sources" list.
+5. Write the response to the user query - only include the answer and no other context.
+
+Answer:
+"""

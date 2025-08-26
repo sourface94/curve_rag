@@ -1,11 +1,13 @@
-from typing import List, Optional
+import pickle
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import spacy
 from gliner import GLiNER
 from sentence_transformers import SentenceTransformer
 
-from curverag.prompts import  PROMPTS
+from curverag.prompts import PROMPTS
 from curverag.atth.train import train
 from curverag.graph import create_graph_outlines, create_graph_openai, create_graph_dataset
 from curverag.atth.kg_dataset import KGDataset
@@ -25,58 +27,111 @@ class CurveRAG:
         entity_types: List[str] = DEFAULT_ENTITY_TYPES,
         gliner_model_name: str = DEFAULT_GLINER_MODEL,
         sentence_transformer_model_name: str=DEFAULT_SENTENCE_TRANSFORMER_MODEL,
-        spacy_model: str="en_core_web_lg"
+        spacy_model: str= "en_core_web_lg",
     ):  
         if openai_client is None and (llm is None or outlines_llm is None):
             raise ValueError("Either an open_ai_client must be provided or both llm and outlines_llm must be provided")
         
+        # Store model names for serialization
+        self.gliner_model_name = gliner_model_name
+        self.sentence_transformer_model_name = sentence_transformer_model_name
+        self.spacy_model = spacy_model
+        self.openai_model = openai_model
+        
         self.using_openai = False
         if openai_client is not None:
             self.openai_client = openai_client
-            self.openai_model = openai_model
             self.using_openai = True
         elif llm is not None and outlines_llm is not None:
             self.llm = llm
             self.outlines_llm = outlines_llm
         else:
-            raise ValueError("Both llm and outlines_llm must be provdied when using a local LLM")
+            raise ValueError("Both llm and outlines_llm must be provided when using a local LLM")
     
+        # Initialize models
         self.gliner_model = GLiNER.from_pretrained(gliner_model_name)
+        self.sentence_model = SentenceTransformer(sentence_transformer_model_name)
+        self.spacy_nlp = spacy.load(spacy_model)
+        
         self.entity_types = entity_types
         self.graph = None
         self.graph_embedding_model = None
         self.dataset = None
-        self.sentence_model = SentenceTransformer(sentence_transformer_model_name)
-        self.spacy_nlp = spacy.load(spacy_model)
-
+        self.node_sentence_embeddings = None
+        self.edge_sentence_embeddings = None
+        
+    def save(self, path: str) -> None:
+        """
+        Save the CurveRAG instance to a file.
+        
+        Args:
+            path: Path to save the model. If None, uses self.save_path
+        """
+            
+        # Create a copy of the instance's dict
+        state = self.__dict__.copy()
+        
+        # Remove non-serializable objects
+        state['gliner_model'] = None
+        state['sentence_model'] = None
+        state['spacy_nlp'] = None
+        if hasattr(self, 'openai_client'):
+            state['openai_client'] = None
+        if hasattr(self, 'llm'):
+            state['llm'] = None
+            state['outlines_llm'] = None
+        
+        # Create directory if it doesn't exist
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Save the state
+        with open(path, 'wb') as f:
+            pickle.dump(state, f)
+    
     @classmethod
-    def load_class(
+    def load(
         cls,
-        llm,
-        outlines_llm,
-        entity_types: List[str],
-        gliner_model_name: str,
-        graph,
-        graph_embedding_model,
-        dataset,
-        sentence_transformer_model_name
-
-    ):
-        inst = cls(
-            llm,
-            outlines_llm,
-            entity_types,
-            gliner_model_name,
-            sentence_transformer_model_name
+        path: str,
+        openai_client=None,
+        llm=None,
+        outlines_llm=None
+    ) -> 'CurveRAG':
+        """
+        Load a saved CurveRAG instance.
+        
+        Args:
+            path: Path to the saved model
+            openai_client: OpenAI client (if using OpenAI)
+            llm: Local LLM instance (if using local LLM)
+            outlines_llm: Outlines LLM instance (if using local LLM)
+            
+        Returns:
+            Loaded CurveRAG instance
+        """
+        with open(path, 'rb') as f:
+            state = pickle.load(f)
+        
+        # Create a new instance
+        instance = cls(
+            openai_client=openai_client,
+            openai_model=state.get('openai_model', 'gpt-4o-mini'),
+            llm=llm,
+            outlines_llm=outlines_llm,
+            entity_types=state.get('entity_types', DEFAULT_ENTITY_TYPES),
+            gliner_model_name=state.get('gliner_model_name', DEFAULT_GLINER_MODEL),
+            sentence_transformer_model_name=state.get('sentence_transformer_model_name', DEFAULT_SENTENCE_TRANSFORMER_MODEL),
+            spacy_model=state.get('spacy_model', 'en_core_web_lg'),
         )
-        inst.node_sentence_embeddings = SentenceTransformer(sentence_transformer_model_name).encode([n.name for n in graph.nodes])
-        inst.graph = graph
-        inst.graph_embedding_model = graph_embedding_model
-        inst.dataset = dataset
-        return inst   
+        
+        # Restore the state
+        for key, value in state.items():
+            if key not in ['gliner_model', 'sentence_model', 'spacy_nlp', 'openai_client', 'llm', 'outlines_llm']:
+                setattr(instance, key, value)
+        
+        return instance
     
     def generate_node_embeddings(self):
-        print('graph embeddings done')
         self.node_sentence_embeddings = self.sentence_model.encode([n.name for n in self.graph.nodes])
         self.edge_sentence_embeddings = self.sentence_model.encode([self.get_edge_description(self.graph, e) for e in self.graph.edges])
 
@@ -85,9 +140,7 @@ class CurveRAG:
 
         And Mr RAGQuery said: Thou shalt learn the laws of the vocaublary, learn the words and their relation.
         """
-
         # create graph
-        print('creating graph')
         if self.using_openai:
             self.graph = create_graph_openai(self.openai_client, docs, model=self.openai_model)
         else:
@@ -106,6 +159,7 @@ class CurveRAG:
         self.node_sentence_embeddings = self.sentence_model.encode([n.name for n in self.graph.nodes])
         print('get edge sentence embeddings')
         self.edge_sentence_embeddings = self.sentence_model.encode([self.get_edge_description(self.graph, e) for e in self.graph.edges])
+
 
     def fit_(self, dataset: KGDataset):
         """Training of RAGQuery model
@@ -126,7 +180,7 @@ class CurveRAG:
         all_entity_types = self.entity_types + additional_entity_types
         entities = self.gliner_model.predict_entities(query, all_entity_types, threshold=threshold)
         entities = [e['text'] for e in entities]
-        print('entities', entities)
+        #print('entities', entities)
 
         query_sp = self.spacy_nlp(query)
         pos_tags = []
@@ -134,7 +188,7 @@ class CurveRAG:
             print(token.text, token.pos_, token.tag_)
             if token.pos_ == 'VERB' or token.pos_ == 'NOUN' or token.pos_ == 'PROPN':
                 pos_tags.append(token.text)
-        print('pos_tags', pos_tags)
+        #print('pos_tags', pos_tags)
         entities += pos_tags
         return entities
     
@@ -142,7 +196,7 @@ class CurveRAG:
         return graph.get_matching_node_by_id(edge.source).name + " has a relationship with " + graph.get_matching_node_by_id(edge.target).name + " called " + edge.name + " and desribed as: " + edge.description 
 
     def get_edge_types(self, entities):
-        print('entites for edges', entities)
+        #print('entites for edges', entities)
         entities = self.sentence_model.encode(entities)
         edges = self.sentence_model.encode([e.name for e in self.graph.edges])
         similarities = self.sentence_model.similarity(edges, entities)
@@ -151,7 +205,7 @@ class CurveRAG:
         similar_indices = [list(np.where(sim_row > threshold)[0]) for sim_row in similarities]
         similar_indices = list(set([i for s in similar_indices for i in s]))
         similar_edges = [e.name for i, e in enumerate(self.graph.edges) if i in similar_indices]
-        print('similar_edges', similar_edges)
+        #print('similar_edges', similar_edges)
         return similar_edges
     
     def query(self,
@@ -161,9 +215,11 @@ class CurveRAG:
         edge_threshold = 0.5,
         max_tokens: int = 100,
         traversal='hyperbolic',
-        top_k: int = 10
+        top_k: int = 10,
+        query_prompt: str = 'generate_response_query_with_references'
     ):
 
+        print('QUERY PROMPT', query_prompt)
         entities = self.get_query_entities(query, threshold, additional_entity_types)
 
         # get all query nodes using sentence transformer
@@ -175,18 +231,18 @@ class CurveRAG:
         # map node ids to those in the KnowldgeGraph (self.graph)
         nodes_idx_id = {v: k for k, v in self.dataset.nodes_id_idx.items()}
         node_ids = [nodes_idx_id[s] for s in similar_indices]
-        print('graph nodes retrieved', [n.name for n in self.graph.nodes if n.id in node_ids])
+        #print('graph nodes retrieved', [n.name for n in self.graph.nodes if n.id in node_ids])
 
         # get addditonal query nodes from edges using sentence transformer 
         similarities = self.sentence_model.similarity(query_embeddings, self.edge_sentence_embeddings)
-        print('similarities', similarities)
+        #print('similarities', similarities)
         edge_similar_indices = [list(np.where(sim_row > edge_threshold)[0]) for sim_row in similarities]
-        print('edge_similar_indices', edge_similar_indices)
+        #print('edge_similar_indices', edge_similar_indices)
         edge_similar_indices = list(set([i for s in edge_similar_indices for i in s]))
-        print('edge_similar_indices', edge_similar_indices)
+        #print('edge_similar_indices', edge_similar_indices)
         for i in edge_similar_indices: # get edge node ids and and idx
             edge = self.graph.edges[i]
-            print('edge to add', edge)
+            #print('edge to add', edge)
             node_ids.append(edge.source)
             similar_indices.append(self.dataset.nodes_id_idx[edge.source])
 
@@ -214,8 +270,8 @@ class CurveRAG:
         elif traversal == 'pp':
             edge_types = self.get_edge_types(entities)
             similar_node_ids = self.graph.traverse_personalised_pagerank(node_ids, top_k=top_k, edge_types=edge_types)
-        print('similar_node_ids', similar_node_ids)
-        print('similar_node_ids graph nodes retrieved', [n.name for n in self.graph.nodes if n.id in similar_node_ids])
+        #print('similar_node_ids', similar_node_ids)
+        #print('similar_node_ids graph nodes retrieved', [n.name for n in self.graph.nodes if n.id in similar_node_ids])
           
         # add nodes retrieved from grpah rtarversal to all nodes that will be added to prompy
         node_ids += similar_node_ids 
@@ -226,7 +282,7 @@ class CurveRAG:
 
         # add descriptions of nodes and entities to prompt, along with query 
         prompt_args = {"query": query, "context": str(query_graph)}
-        prompt = PROMPTS["generate_response_query_with_references"] # use query and query_graph
+        prompt = PROMPTS[query_prompt] # use query and query_graph
         prompt = prompt.format(**prompt_args)
         print(prompt)
 
