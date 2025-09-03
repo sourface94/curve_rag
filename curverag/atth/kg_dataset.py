@@ -28,9 +28,15 @@ class KGDataset(object):
         filters_file = open(os.path.join(self.data_path, "to_skip.pickle"), "rb")
         self.to_skip = pkl.load(filters_file)
         filters_file.close()
-        max_axis = np.max(self.data["train"], axis=0)
-        self.n_entities = int(max(max_axis[0], max_axis[2]) + 1)
-        self.n_predicates = int(max_axis[1] + 1) * 2
+        # Get unique entity and predicate indices from head, relation, and tail columns
+        train_data = self.data["train"]
+        valid_data = self.data["valid"]
+        test_data = self.data["test"]
+        unique_entities = set(train_data[:, 0]).union(set(train_data[:, 2])).union(set(valid_data[:, 0])).union(set(valid_data[:, 2])).union(set(test_data[:, 0])).union(set(test_data[:, 2]))
+        unique_predicates = set(train_data[:, 1]).union(set(valid_data[:, 1])).union(set(test_data[:, 1]))
+        
+        self.n_entities = len(unique_entities)
+        self.n_predicates = len(unique_predicates) * 2  # Multiply by 2 for inverse relations
         self.name = name
 
         try:

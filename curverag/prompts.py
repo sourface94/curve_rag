@@ -2,7 +2,7 @@ PROMPTS = {}
 PROMPTS["entity_relationship_extraction_disparate_prompt"] = """
 # DOMAIN
 # GOAL
-Your goal is to highlight information that is relevant to the domain and the queries that may be asked on it. Given an input document, identify all relevant entities and all relationships among them.
+Your goal is to highlight information that is relevant to the domain and the queries that may be asked on it. Given an input document, identify all relevant entities and all relationships (without exception) that are mentioned among them. These relationships can be both conceptual and real.
 
 # INSTRUCTIONS
 1. **ENTITY IDENTIFICATION**: Identify and meticulously extract all entities mentioned in the document that belong to the provided ENTITY TYPES. For each entity, provide a concise description capturing its key features within the document's context. Use singular entity names and split compound concepts when necessary for clarity.

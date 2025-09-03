@@ -92,7 +92,7 @@ def evaluation(
     """
     Evaluates a CurveRAG model
     """
-    print('query_prompt', query_prompt)
+    #print('query_prompt', query_prompt)
     with open(dataset_path, 'rb') as f:
         eval_dataset = json.load(f)
         eval_dataset = eval_dataset[:dataset_size]
@@ -103,19 +103,20 @@ def evaluation(
             record = json.loads(line)
             aliases[record['Q_id']] += record['aliases'] + record['demonyms']
 
-    ems, f1s, qs, preds, answers = [], [], [], [], []
+    ems, f1s, qs, preds, answers, graphs = [], [], [], [], [], []
     for record in eval_dataset:
         answer = record['answer']
         record_aliases = aliases[record['answer_id']]
         record_answers = [answer] + record_aliases
 
-        pred = model.query(record['question'], traversal=model_traversal, query_prompt=query_prompt)
+        pred, record_graph = model.query(record['question'], traversal=model_traversal, query_prompt=query_prompt)
         
         em, f1 = compute_em_f1(pred, record_answers)
         answers.append((record_answers))
         ems.append(em), f1s.append(f1), preds.append(pred) 
         qs.append(record['question'])
-    return ems, f1s, qs, preds, answers
+        graphs.append(record_graph)
+    return ems, f1s, qs, preds, answers, graphs
 
 
 if __name__ == "__main__":

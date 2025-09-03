@@ -29,19 +29,28 @@ def load_model(
 
 
 def create_atth_dataset(graph):
-
-    nodes_id_idx = {n.id: i for i, n in enumerate(graph.nodes)}
-    nodes_idx_id = {idx: id for id, idx in nodes_id_idx.items()}
-
-    edges_ = set([e.name for e in graph.edges])
-    edges = {e for i, e in enumerate(edges_)}
-    relationship_name_idx = {n: i for i, n in enumerate(edges_)}
-    relationship_idx_name = {idx: name for name, idx in relationship_name_idx.items()}
-
+    # Get all unique nodes and relationships
+    all_nodes = set()
+    relationships = set()
+    
+    for e in graph.edges:
+        all_nodes.add(e.source)
+        all_nodes.add(e.target)
+        relationships.add(e.name)
+    
+    # Create zero-based contiguous indices
+    nodes_id_idx = {node: i for i, node in enumerate(sorted(all_nodes))}
+    relationship_name_idx = {rel: i for i, rel in enumerate(sorted(relationships))}
+    
+    # Create graph list with mapped indices
     graph_list = []
     for e in graph.edges:
-        graph_list.append([nodes_id_idx[e.source], relationship_name_idx[e.name], nodes_id_idx[e.target]])
-
+        graph_list.append([
+            nodes_id_idx[e.source],
+            relationship_name_idx[e.name],
+            nodes_id_idx[e.target]
+        ])
+    
     return np.array(graph_list), nodes_id_idx, relationship_name_idx
 
 

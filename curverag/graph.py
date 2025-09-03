@@ -237,7 +237,6 @@ class KnowledgeGraph(BaseModel):
         node_nn_ids = []
         for distances in all_distances:
             scores, indices = torch.topk(distances, top_k, largest=False)
-            print('scores', scores)
             mask = scores > threshold
             filtered_vals = scores[mask]
             filtered_indices = indices[mask]
@@ -393,11 +392,12 @@ def create_graph_dataset(graph: KnowledgeGraph, dataset_name: str):
     train, valid, test = split_triples(triples)
     all_triples = np.concatenate([train, valid, test], axis=0)
     to_skip = generate_to_skip(all_triples)
+    print('NUM NODES IN TRAIN:', len(set(train[:, 0]).union(set(train[:, 2]))))
     
     save_kg_dataset(all_triples, nodes_id_idx, relationship_name_idx, "./data/" + dataset_name)
     dataset = KGDataset("./data/" + dataset_name, debug=False, name=dataset_name)
 
-    return dataset
+    return dataset, nodes_id_idx, relationship_name_idx
 
 
 

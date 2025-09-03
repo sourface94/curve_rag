@@ -148,7 +148,7 @@ class CurveRAG:
         print('num nodes', len(self.graph.nodes))
         print('unique node ids', set([n.id for n in self.graph.nodes]))
         print('creating dataset')
-        self.dataset = create_graph_dataset(self.graph, dataset_name)
+        self.dataset, self.graph_embedding_nodes_id_idx, self.graph_embedding_relationship_name_idx = create_graph_dataset(self.graph, dataset_name)
 
         # TODO: enchance graph with general knowledge that the LLM has - how can we do this?
 
@@ -160,19 +160,6 @@ class CurveRAG:
         print('get edge sentence embeddings')
         self.edge_sentence_embeddings = self.sentence_model.encode([self.get_edge_description(self.graph, e) for e in self.graph.edges])
 
-
-    def fit_(self, dataset: KGDataset):
-        """Training of RAGQuery model
-        """
-        # TODO: enchance graph with general knowledge that the LLM has - how can we do this?
-
-        # create embeddings
-        print('train kg embeddings')
-        self.graph_embedding_model = train(dataset) 
-        print(type(self.graph_embedding_model))    
-        self.node_sentence_embeddings = self.sentence_model.encode([n.name for n in self.graph.nodes])
-        self.edge_sentence_embeddings = self.sentence_model.encode([self.get_edge_description(self.graph, e) for e in self.graph.edges])   
-
     def get_query_entities(self, query, threshold, additional_entity_types):
         # get gliner entites
         if not additional_entity_types:
@@ -180,16 +167,15 @@ class CurveRAG:
         all_entity_types = self.entity_types + additional_entity_types
         entities = self.gliner_model.predict_entities(query, all_entity_types, threshold=threshold)
         entities = [e['text'] for e in entities]
-        #print('entities', entities)
 
         query_sp = self.spacy_nlp(query)
-        pos_tags = []
+        pos_entities = []
         for token in query_sp:
-            print(token.text, token.pos_, token.tag_)
+            #print(token.text, token.pos_, token.tag_)
             if token.pos_ == 'VERB' or token.pos_ == 'NOUN' or token.pos_ == 'PROPN':
-                pos_tags.append(token.text)
-        #print('pos_tags', pos_tags)
-        entities += pos_tags
+                pos_entities.append(token.text)
+        entities += pos_entities
+        print(entities)
         return entities
     
     def get_edge_description(self, graph, edge):
@@ -218,8 +204,7 @@ class CurveRAG:
         top_k: int = 10,
         query_prompt: str = 'generate_response_query_with_references'
     ):
-
-        print('QUERY PROMPT', query_prompt)
+        print('query:', query)
         entities = self.get_query_entities(query, threshold, additional_entity_types)
 
         # get all query nodes using sentence transformer
@@ -227,13 +212,11 @@ class CurveRAG:
         similarities = self.sentence_model.similarity(query_embeddings, self.node_sentence_embeddings)
         similar_indices = [list(np.where(sim_row > threshold)[0]) for sim_row in similarities]
         similar_indices = list(set([i for s in similar_indices for i in s]))
-        
-        # map node ids to those in the KnowldgeGraph (self.graph)
-        nodes_idx_id = {v: k for k, v in self.dataset.nodes_id_idx.items()}
-        node_ids = [nodes_idx_id[s] for s in similar_indices]
-        #print('graph nodes retrieved', [n.name for n in self.graph.nodes if n.id in node_ids])
 
-        # get addditonal query nodes from edges using sentence transformer 
+        # get node ids of similar embeddings
+        node_ids = [n.id for i, n in enumerate(self.graph.nodes) if i in similar_indices]
+        
+        # get addditonal nodes from graph edges using sentence transformer by using similarity of query entities to edges
         similarities = self.sentence_model.similarity(query_embeddings, self.edge_sentence_embeddings)
         #print('similarities', similarities)
         edge_similar_indices = [list(np.where(sim_row > edge_threshold)[0]) for sim_row in similarities]
@@ -244,29 +227,27 @@ class CurveRAG:
             edge = self.graph.edges[i]
             #print('edge to add', edge)
             node_ids.append(edge.source)
-            similar_indices.append(self.dataset.nodes_id_idx[edge.source])
 
             node_ids.append(edge.target)
-            similar_indices.append(self.dataset.nodes_id_idx[edge.target])
 
-        similar_indices = list(set(similar_indices))
         node_ids = list(set(node_ids))
-        if len(similar_indices) == 0:
+        if len(node_ids) == 0:
             print("Found no embedding indx for entities, doing non KG-RAG result")
-            return "N/A"
+            return "N/A", None
 
         # get related nodes by trraversing through graph
         if traversal == 'hyperbolic':
-            embedding_idx = [similar_indices]
+            # get node indexes for graph embedding
+            embedding_idx = [[self.graph_embedding_nodes_id_idx[n] for n in node_ids if n in self.graph_embedding_nodes_id_idx]]
             entity_node_embs = self.graph_embedding_model.entity.weight.data[embedding_idx]
             # get all embeddings
             all_node_embs = self.graph_embedding_model.entity.weight.data
-            # print('all_node_embs', all_node_embs)
             # traverse graph and get all other related nodes and entities
             similar_node_indexes = self.graph.traverse_hyperbolic_embeddings(entity_node_embs, all_node_embs, threshold=0.6, top_k=top_k)
             similar_node_indexes = [int(i) for s in similar_node_indexes for i in s]
             similar_node_indexes = list(set(similar_node_indexes))
-            similar_node_ids = [nodes_idx_id[id] for id in similar_node_indexes]
+            graph_embedding_nodes_idx_id = {v: k for k, v in self.graph_embedding_nodes_id_idx.items()}
+            similar_node_ids = [graph_embedding_nodes_idx_id[idx] for idx in similar_node_indexes]
         elif traversal == 'pp':
             edge_types = self.get_edge_types(entities)
             similar_node_ids = self.graph.traverse_personalised_pagerank(node_ids, top_k=top_k, edge_types=edge_types)
@@ -284,7 +265,7 @@ class CurveRAG:
         prompt_args = {"query": query, "context": str(query_graph)}
         prompt = PROMPTS[query_prompt] # use query and query_graph
         prompt = prompt.format(**prompt_args)
-        print(prompt)
+        #print(prompt)
 
         if self.using_openai:
             result = self.openai_client.responses.create(
@@ -293,9 +274,8 @@ class CurveRAG:
             )
             result = result.output_text
         else:
-            
             # query llm and return result
             result = self.llm(prompt, max_tokens=max_tokens)
             result = result['choices'][0]['text']
 
-        return result
+        return result, query_graph
