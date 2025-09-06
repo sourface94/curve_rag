@@ -202,7 +202,8 @@ class CurveRAG:
         max_tokens: int = 100,
         traversal='hyperbolic',
         top_k: int = 10,
-        query_prompt: str = 'generate_response_query_with_references'
+        query_prompt: str = 'generate_response_query_with_references',
+        filter_query: str = 'filter_graph'
     ):
         print('query:', query)
         entities = self.get_query_entities(query, threshold, additional_entity_types)
@@ -254,15 +255,30 @@ class CurveRAG:
         #print('similar_node_ids', similar_node_ids)
         #print('similar_node_ids graph nodes retrieved', [n.name for n in self.graph.nodes if n.id in similar_node_ids])
           
-        # add nodes retrieved from grpah rtarversal to all nodes that will be added to prompy
+        # add nodes retrieved from graph traversal to all nodes that will be added to prompy
         node_ids += similar_node_ids 
         node_ids = list(set(node_ids))
 
         # create a subgraph including all nodes we want to add to prompt                            
         query_graph = self.graph.get_subgraph(node_ids)
 
+        # filter subgraph
+        prompt_args = {"query": query, "graph": str(query_graph)}
+        prompt = PROMPTS[filter_query] # use query and query_graph
+        prompt = prompt.format(**prompt_args)
+        if self.using_openai:
+            result = self.openai_client.responses.create(
+                model=self.openai_model,
+                input=prompt
+            )
+            new_context = result.output_text
+        else:
+            # query llm and return result
+            result = self.llm(prompt, max_tokens=max_tokens)
+            new_context = result['choices'][0]['text']
+
         # add descriptions of nodes and entities to prompt, along with query 
-        prompt_args = {"query": query, "context": str(query_graph)}
+        prompt_args = {"query": query, "context": str(new_context)}
         prompt = PROMPTS[query_prompt] # use query and query_graph
         prompt = prompt.format(**prompt_args)
         #print(prompt)

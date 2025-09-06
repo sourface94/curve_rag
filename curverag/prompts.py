@@ -103,3 +103,13 @@ Follow these steps:
 
 Answer:
 """
+PROMPTS["filter_graph"] = """
+You will be provided with a query and a graph of entities and relationships that will be used to help answer the query as part of a RAG system
+
+Your task is to return the nodes and relationships that are most relevant to the query, taking into account multihop relationships that could be used to answer the query
+
+Given the following query: {query}
+
+Return the following nodes and relationships but with the irrelevant nodes and relationships removed:
+{graph}
+"""
