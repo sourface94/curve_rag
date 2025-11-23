@@ -1,10 +1,15 @@
+import time
+
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
+import tiktoken
 import torch
 import llama_cpp
 import numpy as np
 import networkx as nx
+from gliner import GLiNER
+from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 from tqdm import tqdm
 from outlines import generate, models
@@ -16,6 +21,7 @@ from curverag.prompts import PROMPTS
 from curverag.utils import save_kg_dataset, split_triples, generate_to_skip, create_atth_dataset
 from curverag.atth.kg_dataset import KGDataset
 from curverag.atth.utils.hyperbolic import hyp_distance
+from curverag.utils import get_edge_description, get_gliner_entities
 
 
 class Node(BaseModel):
@@ -341,7 +347,8 @@ def create_graph_outlines(model, texts: List[str], is_narrative: bool = False, m
                 sub_graph = generator(prompt, max_tokens=max_tokens, temperature=0, seed=42)
                 graph.upsert(sub_graph)
                 success = True
-            except Exception:
+            except Exception as e:
+                print(f'Failed to process chunk {i}, {e} retrying: ', chunk)
                 tries += 1
 
         if success is False and tries <= 3:
@@ -350,40 +357,129 @@ def create_graph_outlines(model, texts: List[str], is_narrative: bool = False, m
     return graph
 
 
-def create_graph_openai(client, texts: List[str], is_narrative: bool = False, max_tokens=1000, chunk_size: int = 1028, model: str = "gpt-4o-mini"):
+def create_graph_openai(
+    client,
+    texts: List[str],
+    is_narrative: bool = False,
+    max_tokens=1000,
+    chunk_size: int = 1028,
+    model: str = "gpt-4o-mini",
+    gliner_model_name: str = "urchade/gliner_medium-v2.1",
+    sentence_transformer_model_name: str = "all-MiniLM-L6-v2",
+    threshold: float = 0.4,
+    edge_threshold = 0.5,
+):
     """
     Create knowledge graph.
     """
     graph = KnowledgeGraph(nodes=[], edges=[])
+    sentence_model = SentenceTransformer(sentence_transformer_model_name)
+    gliner_model = GLiNER.from_pretrained(gliner_model_name)
+    
 
     # chunk text
     texts = chunk_text(texts, chunk_size)
 
     for i, chunk in enumerate(tqdm(texts)):
+        node_sentence_embeddings = sentence_model.encode([n.description for n in graph.nodes])
+        try:
+            edge_sentence_embeddings = sentence_model.encode([get_edge_description(graph, e) for e in graph.edges])
+        except:
+            edge_sentence_embeddings = None
+
+        # get sub graph based on entities
+        entities = get_gliner_entities(chunk, gliner_model)
+        entities = [e['text'] for e in entities]
+        print('entities', entities)
+        if len(entities) > 0 and node_sentence_embeddings.size > 0:
+            query_embeddings = sentence_model.encode(entities)
+            similarities = sentence_model.similarity(query_embeddings, node_sentence_embeddings)
+            similar_indices = [list(np.where(sim_row > threshold)[0]) for sim_row in similarities]
+            similar_indices = list(set([i for s in similar_indices for i in s]))
+            # get node ids of similar embeddings
+            node_ids = [n.id for i, n in enumerate(graph.nodes) if i in similar_indices]
+        if len(entities) > 0 and edge_sentence_embeddings is not None and edge_sentence_embeddings.size > 0:
+            # get addditonal nodes from graph edges using sentence transformer by using similarity of query entities to edges
+            similarities = sentence_model.similarity(query_embeddings, edge_sentence_embeddings)
+            #print('similarities', similarities)
+            edge_similar_indices = [list(np.where(sim_row > edge_threshold)[0]) for sim_row in similarities]
+            #print('edge_similar_indices', edge_similar_indices)
+            edge_similar_indices = list(set([i for s in edge_similar_indices for i in s]))
+            #print('edge_similar_indices', edge_similar_indices)
+            for i in edge_similar_indices: # get edge node ids and and idx
+                edge = graph.edges[i]
+                #print('edge to add', edge)
+                node_ids.append(edge.source)
+
+                node_ids.append(edge.target)
+            node_ids = list(set(node_ids))
+            query_graph = graph.get_subgraph(node_ids)
+        else:
+            query_graph = graph
+
+        # Initialize tokenizer for the model
+        try:
+            encoding = tiktoken.encoding_for_model(model)
+        except (ImportError, KeyError):
+            # Fallback to cl100k_base encoding if model is not found
+            encoding = tiktoken.get_encoding("cl100k_base")
+            
+        def count_tokens(text: str) -> int:
+            return len(encoding.encode(text))
+            
         tries = 0
         success = False
-        while tries < 3 and success is False: # if creation of the subgrah has failed less than 3 times, then retry it. Otherwise skip this chunk
+        while tries < 3 and success is False: # if creation of the subgraph has failed less than 3 times, then retry it. Otherwise skip this chunk
             try:
+                # Start with the full query_graph
+                current_graph = query_graph
+                
+                # Calculate initial token count
+                system_prompt = generate_openai_system_prompt(current_graph.json())
+                user_prompt = generate_openai_user_prompt(chunk)
+                system_tokens = count_tokens(system_prompt)
+                user_tokens = count_tokens(user_prompt)
+                total_tokens = system_tokens + user_tokens
+                
+                # If we're over the token limit, start truncating the graph
+                while total_tokens > max_tokens and len(current_graph.nodes) > 1:
+                    # Remove the last node and any edges connected to it
+                    node_to_remove = current_graph.nodes[-1]
+                    current_graph.nodes = current_graph.nodes[:-1]
+                    # Remove any edges connected to the removed node
+                    current_graph.edges = [
+                        edge for edge in current_graph.edges 
+                        if edge.source != node_to_remove.id and edge.target != node_to_remove.id
+                    ]
+                    # Recalculate token count
+                    system_prompt = generate_openai_system_prompt(current_graph.json())
+                    system_tokens = count_tokens(system_prompt)
+                    total_tokens = system_tokens + user_tokens
+                
                 response = client.responses.parse(
                     model=model,
                     input=[
-                        {"role": "system", "content": generate_openai_system_prompt(graph.json())},
-                        {
-                            "role": "user",
-                            "content": generate_openai_user_prompt(chunk),
-                        },
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
                     ],
                     text_format=KnowledgeGraph,
                 )
+                
                 sub_graph = response.output_parsed
                 graph.upsert(sub_graph)
                 success = True
-            except Exception:
-                print(f'Failed to process chunk {i}, retrying: ', chunk)
+                print(f'Processed chunk {i}')
+                if i % 5 == 0:
+                    print('Waiting')
+                    time.sleep(10)
+                    
+            except Exception as e:
+                print(f'Failed to process chunk {i}, {e} retrying...')
                 tries += 1
+                time.sleep(61)
 
-        if success is False and tries <= 3:
-            print(f'Failed to process chunk {i}: ', chunk)
+        if not success and tries >= 3:
+            print(f'Failed to process chunk after all retries {i}: {chunk[:100]}...')
 
     return graph
 

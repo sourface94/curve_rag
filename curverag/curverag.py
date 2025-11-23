@@ -21,7 +21,7 @@ class CurveRAG:
     def __init__(
         self,
         openai_client=None,
-        openai_model: str = "gpt-4o-mini",
+        openai_model: str = "gpt-4.1-mini",
         llm=None,
         outlines_llm=None,
         entity_types: List[str] = DEFAULT_ENTITY_TYPES,
@@ -135,14 +135,14 @@ class CurveRAG:
         self.node_sentence_embeddings = self.sentence_model.encode([n.name for n in self.graph.nodes])
         self.edge_sentence_embeddings = self.sentence_model.encode([self.get_edge_description(self.graph, e) for e in self.graph.edges])
 
-    def fit(self, docs: List[str], dataset_name: str):
+    def fit(self, docs: List[str], dataset_name: str, max_tokens: int = 1000):
         """Training of RAGQuery model
 
         And Mr RAGQuery said: Thou shalt learn the laws of the vocaublary, learn the words and their relation.
         """
         # create graph
         if self.using_openai:
-            self.graph = create_graph_openai(self.openai_client, docs, model=self.openai_model)
+            self.graph = create_graph_openai(self.openai_client, docs, model=self.openai_model, max_tokens=max_tokens)
         else:
             self.graph = create_graph_outlines(self.outlines_llm, docs)
         print('num nodes', len(self.graph.nodes))
@@ -200,8 +200,8 @@ class CurveRAG:
         threshold: float = 0.4,
         edge_threshold = 0.5,
         max_tokens: int = 100,
-        traversal='hyperbolic',
-        top_k: int = 10,
+        traversal='all',
+        top_k: int = 5,
         query_prompt: str = 'generate_response_query_with_references',
         filter_query: str = 'filter_graph'
     ):
@@ -209,11 +209,13 @@ class CurveRAG:
         entities = self.get_query_entities(query, threshold, additional_entity_types)
 
         # get all query nodes using sentence transformer
+        print('getting query entities)')
         query_embeddings = self.sentence_model.encode(entities + [query])
         similarities = self.sentence_model.similarity(query_embeddings, self.node_sentence_embeddings)
         similar_indices = [list(np.where(sim_row > threshold)[0]) for sim_row in similarities]
         similar_indices = list(set([i for s in similar_indices for i in s]))
 
+        print('getting similar nodes to entities')
         # get node ids of similar embeddings
         node_ids = [n.id for i, n in enumerate(self.graph.nodes) if i in similar_indices]
         
@@ -236,8 +238,11 @@ class CurveRAG:
             print("Found no embedding indx for entities, doing non KG-RAG result")
             return "N/A", None
 
+        similar_node_ids  = []
         # get related nodes by trraversing through graph
-        if traversal == 'hyperbolic':
+        if traversal == 'hyperbolic' or traversal == 'all':
+            print('getting hyperbolic nodes')
+            # get hyperbolic nodes
             # get node indexes for graph embedding
             embedding_idx = [[self.graph_embedding_nodes_id_idx[n] for n in node_ids if n in self.graph_embedding_nodes_id_idx]]
             entity_node_embs = self.graph_embedding_model.entity.weight.data[embedding_idx]
@@ -248,21 +253,24 @@ class CurveRAG:
             similar_node_indexes = [int(i) for s in similar_node_indexes for i in s]
             similar_node_indexes = list(set(similar_node_indexes))
             graph_embedding_nodes_idx_id = {v: k for k, v in self.graph_embedding_nodes_id_idx.items()}
-            similar_node_ids = [graph_embedding_nodes_idx_id[idx] for idx in similar_node_indexes]
-        elif traversal == 'pp':
+            similar_node_ids += [graph_embedding_nodes_idx_id[idx] for idx in similar_node_indexes]
+        elif traversal == 'personalised_pagerank' or traversal == 'all':
+            print('getting personalised pagerank nodes')
             edge_types = self.get_edge_types(entities)
-            similar_node_ids = self.graph.traverse_personalised_pagerank(node_ids, top_k=top_k, edge_types=edge_types)
-        #print('similar_node_ids', similar_node_ids)
-        #print('similar_node_ids graph nodes retrieved', [n.name for n in self.graph.nodes if n.id in similar_node_ids])
+            similar_node_ids += self.graph.traverse_personalised_pagerank(node_ids, top_k=top_k, edge_types=edge_types)
+            #print('similar_node_ids', similar_node_ids)
+            #print('similar_node_ids graph nodes retrieved', [n.name for n in self.graph.nodes if n.id in similar_node_ids])
           
-        # add nodes retrieved from graph traversal to all nodes that will be added to prompy
+        # add nodes retrieved from graph traversal to all nodes that will be added to prompt
         node_ids += similar_node_ids 
         node_ids = list(set(node_ids))
 
         # create a subgraph including all nodes we want to add to prompt                            
+        print('getting subgraph')
         query_graph = self.graph.get_subgraph(node_ids)
 
         # filter subgraph
+        print('filtering subgraph')
         prompt_args = {"query": query, "graph": str(query_graph)}
         prompt = PROMPTS[filter_query] # use query and query_graph
         prompt = prompt.format(**prompt_args)
@@ -281,8 +289,7 @@ class CurveRAG:
         prompt_args = {"query": query, "context": str(new_context)}
         prompt = PROMPTS[query_prompt] # use query and query_graph
         prompt = prompt.format(**prompt_args)
-        #print(prompt)
-
+        print('running llm call')
         if self.using_openai:
             result = self.openai_client.responses.create(
                 model=self.openai_model,

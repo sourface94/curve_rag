@@ -168,3 +168,30 @@ def save_kg_dataset(triples, nodes_id_idx, relationship_name_idx, output_dir):
         pickle.dump(nodes_id_idx, f)
     with open(os.path.join(output_dir, "relationship_name_idx.pickle"), "wb") as f:
         pickle.dump(relationship_name_idx, f)
+
+
+def get_gliner_entities(text, gliner_model, threshold: float = 0.4, additional_entity_types: Optional[List[str]] = None):
+    # get gliner entites
+    if not additional_entity_types:
+        additional_entity_types = []
+    entity_types = ["person", "location", "entity", "organisation"]
+
+    all_entity_types = entity_types + additional_entity_types
+    entities = gliner_model.predict_entities(text, all_entity_types, threshold=threshold)
+    return entities
+
+def get_edges(sentence_model, entities, graph):
+    #print('entites for edges', entities)
+    entities = sentence_model.encode(entities)
+    edges = sentence_model.encode([e.name for e in graph.edges])
+    similarities = sentence_model.similarity(edges, entities)
+    #print('similarities', similarities)
+    threshold = 0.5
+    similar_indices = [list(np.where(sim_row > threshold)[0]) for sim_row in similarities]
+    similar_indices = list(set([i for s in similar_indices for i in s]))
+    similar_edges = [e.name for i, e in enumerate(graph.edges) if i in similar_indices]
+    #print('similar_edges', similar_edges)
+    return similar_edges
+
+def get_edge_description(graph, edge):
+    return graph.get_matching_node_by_id(edge.source).name + " has a relationship with " + graph.get_matching_node_by_id(edge.target).name + " called " + edge.name + " and desribed as: " + edge.description 
